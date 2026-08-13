@@ -384,5 +384,11 @@ void main() {
     await tester.tap(find.text('Code Source'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget); // Search bar
+    expect(find.text('Render in App'), findsOneWidget);
+
+    // Toggle In-App Render
+    await tester.tap(find.text('Render in App'));
+    await tester.pumpAndSettle();
+    expect(find.text('CSS3 Stylesheet Engine Active'), findsOneWidget);
   });
 }

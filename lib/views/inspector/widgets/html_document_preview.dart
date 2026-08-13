@@ -2,6 +2,7 @@ import 'dart:io' show Directory, File, Platform, Process;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as p;
 import 'package:polyglot_core/polyglot_core.dart';
@@ -11,13 +12,187 @@ import '../../../utils/notify.dart';
 import '../../../utils/number_utils.dart';
 
 enum HtmlViewMode {
-  sandbox,
+  overview,
   source,
   scripts,
   styles,
 }
 
-/// A comprehensive, pro-grade interactive HTML, CSS & JavaScript Document Viewer and Inspector.
+/// Advanced CSS Stylesheet Parser, Color Resolver and Selector Matcher for Flutter HTML Rendering.
+class CssStyleResolver {
+  final Map<String, Map<String, String>> tagRules = {};
+  final Map<String, Map<String, String>> classRules = {};
+  final Map<String, Map<String, String>> idRules = {};
+
+  static const Map<String, Color> namedColors = {
+    'transparent': Color(0x00000000),
+    'white': Color(0xFFFFFFFF),
+    'black': Color(0xFF000000),
+    'red': Color(0xFFFF0000),
+    'green': Color(0xFF008000),
+    'blue': Color(0xFF0000FF),
+    'yellow': Color(0xFFFFFF00),
+    'purple': Color(0xFF800080),
+    'gray': Color(0xFF808080),
+    'grey': Color(0xFF808080),
+    'silver': Color(0xFFC0C0C0),
+    'maroon': Color(0xFF800000),
+    'olive': Color(0xFF808000),
+    'lime': Color(0xFF00FF00),
+    'aqua': Color(0xFF00FFFF),
+    'teal': Color(0xFF008080),
+    'navy': Color(0xFF000080),
+    'fuchsia': Color(0xFFFF00FF),
+    'orange': Color(0xFFFFA500),
+  };
+
+  CssStyleResolver.fromHtml(String html) {
+    _parseStyles(html);
+  }
+
+  void _parseStyles(String html) {
+    final styleRegex = RegExp(r'<style[^>]*>(.*?)</style>', caseSensitive: false, dotAll: true);
+    for (final match in styleRegex.allMatches(html)) {
+      final cssContent = match.group(1) ?? '';
+      _parseCssText(cssContent);
+    }
+  }
+
+  void _parseCssText(String css) {
+    // Remove comments
+    final cleanCss = css.replaceAll(RegExp(r'/\*.*?\*/', dotAll: true), '');
+
+    // Match selector { declarations }
+    final ruleRegex = RegExp(r'([^{]+)\{([^}]+)\}', dotAll: true);
+    for (final match in ruleRegex.allMatches(cleanCss)) {
+      final selectorGroup = match.group(1)?.trim() ?? '';
+      final declarationsText = match.group(2)?.trim() ?? '';
+
+      // Skip polyglot font-size 0 reset trick
+      if (selectorGroup.contains('body') && declarationsText.contains('font-size:0')) {
+        continue;
+      }
+
+      final declarations = _parseDeclarations(declarationsText);
+      final selectors = selectorGroup.split(',');
+
+      for (var selector in selectors) {
+        selector = selector.trim().toLowerCase();
+        if (selector.isEmpty) continue;
+
+        // Clean up pseudo-classes (:hover, :focus, etc) for static Flutter canvas rendering
+        if (selector.contains(':')) {
+          selector = selector.split(':')[0].trim();
+        }
+
+        if (selector.startsWith('.')) {
+          final className = selector.substring(1).trim();
+          classRules.putIfAbsent(className, () => {}).addAll(declarations);
+        } else if (selector.startsWith('#')) {
+          final idName = selector.substring(1).trim();
+          idRules.putIfAbsent(idName, () => {}).addAll(declarations);
+        } else {
+          tagRules.putIfAbsent(selector, () => {}).addAll(declarations);
+        }
+      }
+    }
+  }
+
+  Map<String, String> _parseDeclarations(String declText) {
+    final result = <String, String>{};
+    final pairs = declText.split(';');
+    for (final pair in pairs) {
+      final parts = pair.split(':');
+      if (parts.length >= 2) {
+        final prop = parts[0].trim().toLowerCase();
+        var val = parts.sublist(1).join(':').trim();
+        if (prop.isNotEmpty && val.isNotEmpty) {
+          // Normalize unitless numeric dimensions to px (e.g. font-size: 12 -> 12px)
+          if (RegExp(r'^\d+(\.\d+)?$').hasMatch(val) &&
+              (prop.contains('font-size') ||
+                  prop.contains('padding') ||
+                  prop.contains('margin') ||
+                  prop.contains('radius') ||
+                  prop.contains('width') ||
+                  prop.contains('height'))) {
+            val = '${val}px';
+          }
+          result[prop] = val;
+
+          // Duplicate 'background' color declarations to 'background-color' for Flutter widget engine
+          if (prop == 'background' &&
+              (val.startsWith('#') || val.startsWith('rgb') || val.startsWith('hsl') || namedColors.containsKey(val.toLowerCase()))) {
+            result['background-color'] = val;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  Map<String, String>? resolveStyles(String tagName, List<String> classes, String? id) {
+    final styles = <String, String>{};
+
+    // 1. Tag rules (e.g. h1, p, table, etc.)
+    final tagStyle = tagRules[tagName.toLowerCase()];
+    if (tagStyle != null) styles.addAll(tagStyle);
+
+    // 2. Class rules (e.g. .btn, .cipher, .text, etc.)
+    for (final cls in classes) {
+      final classStyle = classRules[cls.toLowerCase()];
+      if (classStyle != null) styles.addAll(classStyle);
+    }
+
+    // 3. ID rules (e.g. #header)
+    if (id != null) {
+      final idStyle = idRules[id.toLowerCase()];
+      if (idStyle != null) styles.addAll(idStyle);
+    }
+
+    return styles.isEmpty ? null : styles;
+  }
+
+  Color? parseColor(String? colorStr) {
+    if (colorStr == null) return null;
+    var str = colorStr.trim().toLowerCase();
+
+    // Check named colors
+    if (namedColors.containsKey(str)) {
+      return namedColors[str];
+    }
+
+    // Hex colors
+    if (str.startsWith('#')) {
+      str = str.substring(1);
+      if (str.length == 3) {
+        str = '${str[0]}${str[0]}${str[1]}${str[1]}${str[2]}${str[2]}';
+      }
+      if (str.length == 6) {
+        final val = int.tryParse('FF$str', radix: 16);
+        if (val != null) return Color(val);
+      } else if (str.length == 8) {
+        final val = int.tryParse(str, radix: 16);
+        if (val != null) return Color(val);
+      }
+    }
+
+    // RGB / RGBA
+    if (str.startsWith('rgb')) {
+      final match = RegExp(r'rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d\.]+))?\s*\)').firstMatch(str);
+      if (match != null) {
+        final r = int.parse(match.group(1)!);
+        final g = int.parse(match.group(2)!);
+        final b = int.parse(match.group(3)!);
+        final a = match.group(4) != null ? double.parse(match.group(4)!) : 1.0;
+        return Color.fromRGBO(r, g, b, a);
+      }
+    }
+
+    return null;
+  }
+}
+
+/// A comprehensive, pro-grade interactive HTML, CSS & JavaScript Document Inspector and In-App Renderer.
 class HtmlDocumentPreview extends StatefulWidget {
   final String htmlContent;
   final String fileName;
@@ -35,9 +210,10 @@ class HtmlDocumentPreview extends StatefulWidget {
 }
 
 class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
-  HtmlViewMode _selectedTab = HtmlViewMode.sandbox;
+  HtmlViewMode _selectedTab = HtmlViewMode.overview;
   String _searchQuery = '';
   bool _wrapLines = true;
+  bool _renderInApp = false;
   final TextEditingController _searchController = TextEditingController();
 
   static const int _pageSize = 250;
@@ -45,11 +221,13 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
 
   List<String> _cachedLines = [];
   int _visibleLineCount = _pageSize;
+  late CssStyleResolver _cssResolver;
 
   @override
   void initState() {
     super.initState();
     _splitLines();
+    _cssResolver = CssStyleResolver.fromHtml(widget.htmlContent);
   }
 
   @override
@@ -57,6 +235,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.htmlContent != widget.htmlContent) {
       _splitLines();
+      _cssResolver = CssStyleResolver.fromHtml(widget.htmlContent);
     }
   }
 
@@ -222,7 +401,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
 
           const SizedBox(height: 12),
 
-          // 2. Navigation Tabs (Sandbox / Source / Scripts / Styles)
+          // 2. Navigation Tabs (Overview & DOM / Code Source / Scripts / Styles)
           Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
@@ -232,7 +411,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
             ),
             child: Row(
               children: [
-                Expanded(child: _buildNavTab(HtmlViewMode.sandbox, 'Overview & DOM', Icons.dashboard_outlined)),
+                Expanded(child: _buildNavTab(HtmlViewMode.overview, 'Overview & DOM', Icons.dashboard_outlined)),
                 Expanded(child: _buildNavTab(HtmlViewMode.source, 'Code Source', Icons.terminal_rounded)),
                 Expanded(child: _buildNavTab(HtmlViewMode.scripts, 'JavaScript (${info.scriptCount})', Icons.code_rounded)),
                 Expanded(child: _buildNavTab(HtmlViewMode.styles, 'CSS & Styles (${info.styleCount})', Icons.style_outlined)),
@@ -339,8 +518,8 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
 
   Widget _buildActiveTabContent() {
     switch (_selectedTab) {
-      case HtmlViewMode.sandbox:
-        return _buildSandboxTab();
+      case HtmlViewMode.overview:
+        return _buildOverviewTab();
       case HtmlViewMode.source:
         return _buildSourceTab();
       case HtmlViewMode.scripts:
@@ -351,12 +530,14 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
   }
 
   /// Tab 1: Overview & DOM Structure
-  Widget _buildSandboxTab() {
+  Widget _buildOverviewTab() {
     final info = widget.htmlInfo;
 
     final bodyText = info.cleanBodyHtml;
     final isBodyLong = bodyText != null && bodyText.length > 2500;
-    final displayBody = isBodyLong ? '${bodyText.substring(0, 2500)}\n\n... [${bodyText.length - 2500} characters truncated in overview. Use \'Code Source\' or \'Open in Browser\' to view full content]' : bodyText;
+    final displayBody = isBodyLong
+        ? '${bodyText.substring(0, 2500)}\n\n... [${bodyText.length - 2500} characters truncated in preview. Use \'Code Source\' or \'Open in Browser\' to view full content]'
+        : bodyText;
 
     return Container(
       decoration: BoxDecoration(
@@ -368,56 +549,6 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Live Launch Banner
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.primary.withAlpha(25),
-                  const Color(0xFF38BDF8).withAlpha(15),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.primary.withAlpha(60)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.rocket_launch_rounded, size: 20, color: AppTheme.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Full Modern JavaScript & CSS Runtime Sandbox',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Launch this webpage in the default browser to run dynamic WebGL, Canvas, JavaScript ES2024, CSS Grid, and interactive animations.',
-                        style: TextStyle(fontSize: 10, color: AppTheme.textSecondary.withAlpha(200)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: const Color(0xFF0D0F12),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                  ),
-                  onPressed: _openInSystemBrowser,
-                  child: const Text('Launch Live', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
           // DOM Element Breakdown Cards
           const Text(
             'Document Element Statistics',
@@ -444,7 +575,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Extracted Body Content',
+                  'Extracted Clean Body Content',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
                 ),
                 if (isBodyLong)
@@ -456,7 +587,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
             ),
             const SizedBox(height: 6),
             Container(
-              constraints: const BoxConstraints(maxHeight: 120),
+              constraints: const BoxConstraints(maxHeight: 140),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppTheme.surfaceElevated,
@@ -511,7 +642,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
     );
   }
 
-  /// Tab 2: High-Performance Virtualized Code Source with SelectionArea, Pagination & Safe Regex
+  /// Tab 2: Code Source with High-Fidelity In-App CSS/HTML Render Toggle
   Widget _buildSourceTab() {
     final totalLines = _cachedLines.length;
     final displayLinesCount = _visibleLineCount.clamp(0, totalLines);
@@ -526,6 +657,27 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
       }
     }
 
+    // Clean HTML content for in-app rendering
+    String renderContent = (widget.htmlInfo.cleanBodyHtml != null && widget.htmlInfo.cleanBodyHtml!.isNotEmpty)
+        ? widget.htmlInfo.cleanBodyHtml!
+        : widget.htmlContent;
+
+    // Filter out binary polyglot comment artifacts if present
+    if (renderContent.contains('-->') && renderContent.contains('<!--')) {
+      final start = renderContent.indexOf('-->');
+      final end = renderContent.lastIndexOf('<!--');
+      if (start != -1 && end > start) {
+        renderContent = renderContent.substring(start + 3, end).trim();
+      }
+    }
+
+    // Extract body & html styles for dynamic canvas container
+    final bodyRules = _cssResolver.tagRules['body'] ?? _cssResolver.tagRules['html'] ?? {};
+    final bodyBgColor = _cssResolver.parseColor(bodyRules['background-color'] ?? bodyRules['background']);
+    final bodyTextColor = _cssResolver.parseColor(bodyRules['color']);
+    final bodyFontFamilyRaw = bodyRules['font-family']?.replaceAll(RegExp(r"""['"]"""), '').split(',').first.trim();
+    final isBodyCentered = bodyRules['text-align'] == 'center';
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF0C0E12),
@@ -535,72 +687,164 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
       padding: const EdgeInsets.all(10),
       child: Column(
         children: [
-          // Source Toolbar: Search, Matches, Wrap & Copy
+          // Toolbar: Render In-App Toggle, Search, Matches, Wrap & Copy
           Row(
             children: [
-              Expanded(
-                child: Container(
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceElevated,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: AppTheme.borderSubtle),
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                    style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppTheme.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Search in source...',
-                      hintStyle: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted),
-                      prefixIcon: const Icon(Icons.search, size: 13, color: AppTheme.textMuted),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 12, color: AppTheme.textMuted),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                            )
-                          : null,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+              // In-App Render / Source Toggle Button
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: AppTheme.borderSubtle),
+                ),
+                child: Row(
+                  children: [
+                    InkWell(
+                      onTap: () => setState(() => _renderInApp = false),
+                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(5)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: !_renderInApp ? AppTheme.primary.withAlpha(30) : Colors.transparent,
+                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.code_rounded, size: 12, color: !_renderInApp ? AppTheme.primary : AppTheme.textMuted),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Source',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: !_renderInApp ? FontWeight.bold : FontWeight.normal,
+                                color: !_renderInApp ? AppTheme.textPrimary : AppTheme.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () => setState(() => _renderInApp = true),
+                      borderRadius: const BorderRadius.horizontal(right: Radius.circular(5)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _renderInApp ? AppTheme.accent.withAlpha(30) : Colors.transparent,
+                          borderRadius: const BorderRadius.horizontal(right: Radius.circular(5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.visibility_rounded, size: 12, color: _renderInApp ? AppTheme.accent : AppTheme.textMuted),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Render in App',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: _renderInApp ? FontWeight.bold : FontWeight.normal,
+                                color: _renderInApp ? AppTheme.accent : AppTheme.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              if (!_renderInApp) ...[
+                Expanded(
+                  child: Container(
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceElevated,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: AppTheme.borderSubtle),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                      style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        hintText: 'Search in source...',
+                        hintStyle: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted),
+                        prefixIcon: const Icon(Icons.search, size: 13, color: AppTheme.textMuted),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 12, color: AppTheme.textMuted),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (_searchQuery.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(25) : AppTheme.danger.withAlpha(20),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(
-                      color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(80) : AppTheme.danger.withAlpha(80),
+                if (_searchQuery.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(25) : AppTheme.danger.withAlpha(20),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(80) : AppTheme.danger.withAlpha(80),
+                      ),
+                    ),
+                    child: Text(
+                      '$searchMatchCount match${searchMatchCount == 1 ? '' : 'es'}',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: searchMatchCount > 0 ? AppTheme.primary : AppTheme.danger,
+                      ),
                     ),
                   ),
-                  child: Text(
-                    '$searchMatchCount match${searchMatchCount == 1 ? '' : 'es'}',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold,
-                      color: searchMatchCount > 0 ? AppTheme.primary : AppTheme.danger,
-                    ),
+                ],
+                const SizedBox(width: 6),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: _wrapLines ? 'Disable Line Wrap' : 'Enable Line Wrap',
+                  icon: Icon(
+                    _wrapLines ? Icons.wrap_text_rounded : Icons.format_align_left_rounded,
+                    size: 15,
+                    color: _wrapLines ? AppTheme.primary : AppTheme.textMuted,
+                  ),
+                  onPressed: () => setState(() => _wrapLines = !_wrapLines),
+                ),
+              ] else ...[
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (bodyBgColor ?? AppTheme.accent).withAlpha(25),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: (bodyBgColor ?? AppTheme.accent).withAlpha(80)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.palette_outlined, size: 11, color: bodyBgColor ?? AppTheme.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        bodyBgColor != null ? 'CSS Background Applied' : 'CSS3 Stylesheet Engine Active',
+                        style: TextStyle(fontSize: 9.5, color: bodyBgColor ?? AppTheme.accent, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ),
               ],
-              const SizedBox(width: 8),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: _wrapLines ? 'Disable Line Wrap' : 'Enable Line Wrap',
-                icon: Icon(
-                  _wrapLines ? Icons.wrap_text_rounded : Icons.format_align_left_rounded,
-                  size: 15,
-                  color: _wrapLines ? AppTheme.primary : AppTheme.textMuted,
-                ),
-                onPressed: () => setState(() => _wrapLines = !_wrapLines),
-              ),
+
+              const SizedBox(width: 6),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Copy Source Code',
@@ -612,89 +856,145 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
 
           const SizedBox(height: 8),
 
-          // Code Container with SelectionArea and Virtualized List
+          // Container: Switch between In-App Rendered View or Syntax-Highlighted Source Code
           Container(
             height: 250,
+            width: double.infinity,
             decoration: BoxDecoration(
-              color: const Color(0xFF090B0E),
+              color: _renderInApp ? (bodyBgColor ?? const Color(0xFF0D0F12)) : const Color(0xFF090B0E),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: AppTheme.borderSubtle.withAlpha(50)),
             ),
-            child: SelectionArea(
-              child: ListView.builder(
-                itemCount: displayLinesCount + (hasMoreLines ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == displayLinesCount) {
-                    // Paging / Load More Footer
-                    return Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                      color: AppTheme.surfaceElevated.withAlpha(80),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Showing 1–$displayLinesCount of ${NumberUtils.formatInt(totalLines)} lines',
-                            style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+            child: _renderInApp
+                ? Container(
+                    padding: const EdgeInsets.all(16),
+                    alignment: isBodyCentered ? Alignment.topCenter : Alignment.topLeft,
+                    child: SingleChildScrollView(
+                      child: SelectionArea(
+                        child: HtmlWidget(
+                          renderContent,
+                          textStyle: TextStyle(
+                            fontSize: 12.5,
+                            color: bodyTextColor ?? AppTheme.textPrimary,
+                            height: 1.45,
+                            fontFamily: (bodyFontFamilyRaw != null && bodyFontFamilyRaw.isNotEmpty) ? bodyFontFamilyRaw : 'Segoe UI',
                           ),
-                          Row(
+                          customStylesBuilder: (element) {
+                            final tagName = element.localName ?? '';
+                            final classAttr = element.attributes['class'] ?? '';
+                            final classes = classAttr.split(RegExp(r'\s+')).where((c) => c.isNotEmpty).toList();
+                            final idAttr = element.attributes['id'];
+
+                            // 1. Resolve CSS declarations from embedded <style> tags and stylesheets
+                            final resolved = _cssResolver.resolveStyles(tagName, classes, idAttr) ?? <String, String>{};
+
+                            // 2. Default element aesthetics for unstyled components
+                            if (tagName == 'a' && !resolved.containsKey('color')) {
+                              resolved['color'] = '#38BDF8';
+                              resolved['text-decoration'] = 'underline';
+                            }
+                            if ((tagName == 'h1' || tagName == 'h2' || tagName == 'h3') && !resolved.containsKey('color')) {
+                              if (bodyTextColor == null) {
+                                resolved['color'] = '#F9FAFB';
+                              }
+                              resolved['font-weight'] = 'bold';
+                            }
+                            if (tagName == 'code' && !resolved.containsKey('background-color')) {
+                              resolved['background-color'] = '#1E222A';
+                              resolved['color'] = '#34D399';
+                              resolved['font-family'] = 'monospace';
+                              resolved['padding'] = '2px 5px';
+                              resolved['border-radius'] = '3px';
+                            }
+                            if (tagName == 'pre' && !resolved.containsKey('background-color')) {
+                              resolved['background-color'] = '#15181E';
+                              resolved['color'] = '#E5E7EB';
+                              resolved['font-family'] = 'monospace';
+                              resolved['padding'] = '8px';
+                              resolved['border-radius'] = '6px';
+                            }
+
+                            return resolved.isEmpty ? null : resolved;
+                          },
+                        ),
+                      ),
+                    ),
+                  )
+                : SelectionArea(
+                    child: ListView.builder(
+                      itemCount: displayLinesCount + (hasMoreLines ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == displayLinesCount) {
+                          // Paging / Load More Footer
+                          return Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                            color: AppTheme.surfaceElevated.withAlpha(80),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Showing 1–$displayLinesCount of ${NumberUtils.formatInt(totalLines)} lines',
+                                  style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                                ),
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      onPressed: _loadMoreLines,
+                                      child: Text('Load next $_pageSize lines', style: const TextStyle(fontSize: 10, color: AppTheme.primary)),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    TextButton(
+                                      style: TextButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      onPressed: _showAllLines,
+                                      child: const Text('Show all lines', style: TextStyle(fontSize: 10, color: Color(0xFF38BDF8))),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        final lineNum = index + 1;
+                        final rawLineText = _cachedLines[index];
+                        final isMatch = _searchQuery.isNotEmpty && rawLineText.toLowerCase().contains(_searchQuery.toLowerCase());
+
+                        return Container(
+                          color: isMatch ? AppTheme.primary.withAlpha(40) : Colors.transparent,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  visualDensity: VisualDensity.compact,
+                              SizedBox(
+                                width: 38,
+                                child: Text(
+                                  '$lineNum',
+                                  style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Color(0xFF4B5563)),
+                                  textAlign: TextAlign.right,
                                 ),
-                                onPressed: _loadMoreLines,
-                                child: Text('Load next $_pageSize lines', style: const TextStyle(fontSize: 10, color: AppTheme.primary)),
                               ),
-                              const SizedBox(width: 6),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  visualDensity: VisualDensity.compact,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text.rich(
+                                  _highlightHtmlLine(rawLineText, _searchQuery),
+                                  style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', height: 1.35),
+                                  maxLines: _wrapLines ? null : 1,
+                                  overflow: _wrapLines ? TextOverflow.clip : TextOverflow.ellipsis,
                                 ),
-                                onPressed: _showAllLines,
-                                child: const Text('Show all lines', style: TextStyle(fontSize: 10, color: Color(0xFF38BDF8))),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final lineNum = index + 1;
-                  final rawLineText = _cachedLines[index];
-                  final isMatch = _searchQuery.isNotEmpty && rawLineText.toLowerCase().contains(_searchQuery.toLowerCase());
-
-                  return Container(
-                    color: isMatch ? AppTheme.primary.withAlpha(40) : Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 38,
-                          child: Text(
-                            '$lineNum',
-                            style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Color(0xFF4B5563)),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text.rich(
-                            _highlightHtmlLine(rawLineText, _searchQuery),
-                            style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', height: 1.35),
-                            maxLines: _wrapLines ? null : 1,
-                            overflow: _wrapLines ? TextOverflow.clip : TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
           ),
         ],
       ),
