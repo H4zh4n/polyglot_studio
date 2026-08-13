@@ -1,6 +1,6 @@
 {
-    "name": "polyglot",
-    "short_name": "polyglot",
+    "name": "Polyglot Studio",
+    "short_name": "Polyglot Studio",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

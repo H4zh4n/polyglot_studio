@@ -692,4 +692,77 @@ void main() {
     expect(find.text('Modal Content Inside Preview'), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
   });
+
+  testWidgets('Dynamic version badge renders in AppBar as a static badge', (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.appVersion.value = '1.0.0';
+    controller.appBuildNumber.value = '1';
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('v1.0.0'), findsOneWidget);
+
+    // Tapping version does not open dialog
+    await tester.tap(find.text('v1.0.0'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cross-Platform Media Polyglot Suite'), findsNothing);
+  });
+
+  testWidgets('GithubLinkButton renders in AppBar and opens AboutAppDialog on tap', (WidgetTester tester) async {
+    Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pumpAndSettle();
+
+    // Verify compact GitHub link button in AppBar
+    expect(find.text('H4zh4n'), findsOneWidget);
+
+    // Tapping GitHub button in AppBar opens AboutAppDialog
+    await tester.tap(find.text('H4zh4n'));
+    await tester.pumpAndSettle();
+
+    // Inside About dialog, full GithubLinkButton is visible
+    expect(find.text('Created by H4zh4n'), findsOneWidget);
+    expect(find.text('github.com/H4zh4n'), findsOneWidget);
+
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Mobile bottom navigation bar switches seamlessly between Studio and Inspector', (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 0;
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pumpAndSettle();
+
+    // Studio is active initially
+    expect(find.text('1. Required Base Media'), findsOneWidget);
+
+    // Tap bottom navigation Inspector item
+    await tester.tap(find.text('Inspector'));
+    await tester.pumpAndSettle();
+
+    expect(controller.selectedViewMode.value, 1);
+    expect(find.text('Polyglot Inspector & Viewer'), findsOneWidget);
+
+    // Tap bottom navigation Studio item
+    await tester.tap(find.text('Studio'));
+    await tester.pumpAndSettle();
+
+    expect(controller.selectedViewMode.value, 0);
+    expect(find.text('1. Required Base Media'), findsOneWidget);
+  });
 }

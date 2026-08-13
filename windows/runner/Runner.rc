@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.hazhan" "\0"
-            VALUE "FileDescription", "polyglot" "\0"
+            VALUE "FileDescription", "Polyglot Studio" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "polyglot" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.hazhan. All rights reserved." "\0"
             VALUE "OriginalFilename", "polyglot.exe" "\0"
-            VALUE "ProductName", "polyglot" "\0"
+            VALUE "ProductName", "Polyglot Studio" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
