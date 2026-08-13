@@ -137,7 +137,7 @@ class _ZipArchivePreviewState extends State<ZipArchivePreview> {
     final cleanFileName = p.basename(entry.name);
     final ext = p.extension(cleanFileName).replaceAll('.', '').toLowerCase();
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Extracted File to Disk',
       fileName: cleanFileName,
       type: ext.isNotEmpty ? FileType.custom : FileType.any,
@@ -169,7 +169,7 @@ class _ZipArchivePreviewState extends State<ZipArchivePreview> {
       return;
     }
 
-    final targetDir = await FilePicker.platform.getDirectoryPath(
+    final targetDir = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select Output Directory for Extracted Files',
     );
 

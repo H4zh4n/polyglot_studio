@@ -102,7 +102,7 @@ class PolyglotController extends GetxController {
 
   // Pickers
   Future<void> pickImage() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'ico'],
       withData: true,
@@ -113,7 +113,7 @@ class PolyglotController extends GetxController {
   }
 
   Future<void> pickMedia() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['mp4', 'm4v', 'm4a', 'mov'],
       withData: true,
@@ -127,7 +127,7 @@ class PolyglotController extends GetxController {
   }
 
   Future<void> pickPdf() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
       withData: true,
@@ -138,7 +138,7 @@ class PolyglotController extends GetxController {
   }
 
   Future<void> pickHtml() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['html', 'htm'],
       withData: true,
@@ -149,7 +149,7 @@ class PolyglotController extends GetxController {
   }
 
   Future<void> pickZipFiles() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
       allowedExtensions: ['zip', 'jar', 'apk', 'docx', 'xlsx', 'pptx'],
@@ -163,7 +163,7 @@ class PolyglotController extends GetxController {
   }
 
   Future<void> pickAppendables() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.any,
       withData: true,
@@ -351,7 +351,7 @@ class PolyglotController extends GetxController {
 
     final defaultName = combinedFileName;
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Polyglot File to Disk',
       fileName: defaultName,
       type: FileType.any,
@@ -380,7 +380,7 @@ class PolyglotController extends GetxController {
 
   // Inspect any existing file
   Future<void> pickAndInspectFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.any,
       withData: true,
     );
@@ -417,7 +417,7 @@ class PolyglotController extends GetxController {
     final baseName = p.basenameWithoutExtension(res.fileName);
     final defaultName = '${baseName}_extracted.$ext';
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Extracted Image to Disk',
       fileName: defaultName,
       type: FileType.custom,
@@ -454,7 +454,7 @@ class PolyglotController extends GetxController {
     final defaultName = '${baseName}_media.$defaultExt';
     final bytesToSave = (isAudio ? res.extractedAudioBytes : res.extractedMediaBytes) ?? res.rawBytes!;
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Extracted Media to Disk',
       fileName: defaultName,
       type: FileType.custom,
@@ -485,7 +485,7 @@ class PolyglotController extends GetxController {
     final res = inspectionResult.value;
     if (res == null || res.appendableBytes == null) return;
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Extracted Payload to Disk',
       fileName: 'extracted_payload.bin',
       type: FileType.any,
@@ -524,7 +524,7 @@ class PolyglotController extends GetxController {
     final defaultName = '${baseName}_clean.html';
     final bytesToSave = Uint8List.fromList(utf8.encode(contentToExport));
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Clean Extracted HTML to Disk',
       fileName: defaultName,
       type: FileType.custom,
@@ -559,7 +559,7 @@ class PolyglotController extends GetxController {
     final defaultName = '${baseName}_extracted.pdf';
     final bytesToSave = res.extractedPdfBytes!;
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Extracted PDF to Disk',
       fileName: defaultName,
       type: FileType.custom,
@@ -594,7 +594,7 @@ class PolyglotController extends GetxController {
     final defaultName = '${baseName}_extracted.zip';
     final bytesToSave = res.extractedZipBytes!;
 
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Save Extracted ZIP Archive to Disk',
       fileName: defaultName,
       type: FileType.custom,
