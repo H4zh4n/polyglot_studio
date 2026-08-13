@@ -11,9 +11,10 @@ import 'package:get/get.dart';
 import 'package:path/path.dart' as p;
 import 'package:pdfx/pdfx.dart';
 import 'package:polyglot_core/polyglot_core.dart';
-import 'package:video_player/video_player.dart';
+import 'audio_player_preview.dart';
 import 'html_document_preview.dart';
 import 'image_preview_dialog.dart';
+import 'video_player_preview.dart';
 import '../../../controllers/polyglot_controller.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/notify.dart';
@@ -737,20 +738,20 @@ class _ZipArchivePreviewState extends State<ZipArchivePreview> {
     }
 
     if (['.mp3', '.m4a', '.wav', '.aac', '.flac', '.ogg'].contains(ext)) {
-      return _ZipEmbeddedAudioPreview(
+      return AudioPlayerPreview(
         key: ValueKey('zip_audio_${entry.name}'),
         audioBytes: bytes,
         fileName: entry.name,
-        entry: entry,
+        format: ext,
       );
     }
 
     if (['.mp4', '.mkv', '.avi', '.mov', '.webm'].contains(ext)) {
-      return _ZipEmbeddedVideoPreview(
+      return VideoPlayerPreview(
         key: ValueKey('zip_video_${entry.name}'),
         videoBytes: bytes,
         fileName: entry.name,
-        entry: entry,
+        format: ext,
       );
     }
 
@@ -1795,276 +1796,4 @@ class _ZipEmbeddedHtmlPreviewState extends State<_ZipEmbeddedHtmlPreview> {
   }
 }
 
-/// Embedded in-drawer audio player for ZIP audio entries.
-class _ZipEmbeddedAudioPreview extends StatefulWidget {
-  final Uint8List audioBytes;
-  final String fileName;
-  final ZipEntryInfo entry;
-
-  const _ZipEmbeddedAudioPreview({
-    super.key,
-    required this.audioBytes,
-    required this.fileName,
-    required this.entry,
-  });
-
-  @override
-  State<_ZipEmbeddedAudioPreview> createState() => _ZipEmbeddedAudioPreviewState();
-}
-
-class _ZipEmbeddedAudioPreviewState extends State<_ZipEmbeddedAudioPreview> {
-  VideoPlayerController? _player;
-  bool _isInit = false;
-  bool _isPlaying = false;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-  File? _tempFile;
-
-  @override
-  void initState() {
-    super.initState();
-    _initAudio();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ZipEmbeddedAudioPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.audioBytes != widget.audioBytes) {
-      _initAudio();
-    }
-  }
-
-  @override
-  void dispose() {
-    _player?.dispose();
-    try {
-      _tempFile?.deleteSync();
-    } catch (_) {}
-    super.dispose();
-  }
-
-  Future<void> _initAudio() async {
-    _player?.dispose();
-    setState(() {
-      _isInit = false;
-      _isPlaying = false;
-    });
-
-    try {
-      final tempDir = Directory.systemTemp;
-      final cleanExt = p.extension(widget.fileName);
-      _tempFile = File(p.join(tempDir.path, 'polyglot_audio_${DateTime.now().millisecondsSinceEpoch}$cleanExt'));
-      await _tempFile!.writeAsBytes(widget.audioBytes, flush: true);
-
-      _player = VideoPlayerController.file(_tempFile!)
-        ..addListener(() {
-          if (!mounted || _player == null) return;
-          final pos = _player!.value.position;
-          final dur = _player!.value.duration;
-          final playing = _player!.value.isPlaying;
-          if (pos != _position || dur != _duration || playing != _isPlaying) {
-            setState(() {
-              _position = pos;
-              _duration = dur;
-              _isPlaying = playing;
-            });
-          }
-        });
-
-      await _player!.initialize();
-      if (mounted) {
-        setState(() => _isInit = true);
-      }
-    } catch (_) {}
-  }
-
-  String _formatDuration(Duration d) {
-    final m = d.inMinutes;
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isInit || _player == null) {
-      return const Center(
-        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
-      );
-    }
-
-    final maxMs = _duration.inMilliseconds.toDouble();
-    final posMs = _position.inMilliseconds.toDouble().clamp(0.0, maxMs > 0 ? maxMs : 1.0);
-
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.borderSubtle),
-            ),
-            child: const Icon(Icons.audiotrack_rounded, size: 32, color: AppTheme.accent),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            widget.fileName,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace', color: AppTheme.textPrimary),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 12),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              trackHeight: 3,
-              activeTrackColor: AppTheme.accent,
-              inactiveTrackColor: AppTheme.borderSubtle,
-              thumbColor: AppTheme.accent,
-            ),
-            child: Slider(
-              value: posMs,
-              max: maxMs > 0 ? maxMs : 1.0,
-              onChanged: (val) {
-                _player?.seekTo(Duration(milliseconds: val.toInt()));
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(_formatDuration(_position), style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
-                IconButton(
-                  icon: Icon(_isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, size: 32, color: AppTheme.accent),
-                  onPressed: () {
-                    if (_isPlaying) {
-                      _player?.pause();
-                    } else {
-                      _player?.play();
-                    }
-                  },
-                ),
-                Text(_formatDuration(_duration), style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Embedded in-drawer video player for ZIP video entries.
-class _ZipEmbeddedVideoPreview extends StatefulWidget {
-  final Uint8List videoBytes;
-  final String fileName;
-  final ZipEntryInfo entry;
-
-  const _ZipEmbeddedVideoPreview({
-    super.key,
-    required this.videoBytes,
-    required this.fileName,
-    required this.entry,
-  });
-
-  @override
-  State<_ZipEmbeddedVideoPreview> createState() => _ZipEmbeddedVideoPreviewState();
-}
-
-class _ZipEmbeddedVideoPreviewState extends State<_ZipEmbeddedVideoPreview> {
-  VideoPlayerController? _player;
-  bool _isInit = false;
-  bool _isPlaying = false;
-  File? _tempFile;
-
-  @override
-  void initState() {
-    super.initState();
-    _initVideo();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ZipEmbeddedVideoPreview oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.videoBytes != widget.videoBytes) {
-      _initVideo();
-    }
-  }
-
-  @override
-  void dispose() {
-    _player?.dispose();
-    try {
-      _tempFile?.deleteSync();
-    } catch (_) {}
-    super.dispose();
-  }
-
-  Future<void> _initVideo() async {
-    _player?.dispose();
-    setState(() {
-      _isInit = false;
-      _isPlaying = false;
-    });
-
-    try {
-      final tempDir = Directory.systemTemp;
-      final cleanExt = p.extension(widget.fileName);
-      _tempFile = File(p.join(tempDir.path, 'polyglot_video_${DateTime.now().millisecondsSinceEpoch}$cleanExt'));
-      await _tempFile!.writeAsBytes(widget.videoBytes, flush: true);
-
-      _player = VideoPlayerController.file(_tempFile!)
-        ..addListener(() {
-          if (!mounted || _player == null) return;
-          final playing = _player!.value.isPlaying;
-          if (playing != _isPlaying) {
-            setState(() => _isPlaying = playing);
-          }
-        });
-
-      await _player!.initialize();
-      if (mounted) {
-        setState(() => _isInit = true);
-      }
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isInit || _player == null) {
-      return const Center(
-        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
-      );
-    }
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Center(
-          child: AspectRatio(
-            aspectRatio: _player!.value.aspectRatio > 0 ? _player!.value.aspectRatio : 16 / 9,
-            child: VideoPlayer(_player!),
-          ),
-        ),
-        Positioned(
-          bottom: 8,
-          child: IconButton(
-            icon: Icon(_isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded, size: 36, color: Colors.white.withAlpha(220)),
-            onPressed: () {
-              if (_isPlaying) {
-                _player?.pause();
-              } else {
-                _player?.play();
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
-}
 
