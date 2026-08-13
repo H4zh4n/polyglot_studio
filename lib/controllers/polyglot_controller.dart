@@ -82,14 +82,14 @@ class PolyglotController extends GetxController {
   Future<void> pickMedia() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['mp4', 'm4v', 'm4a', 'mov', 'mp3', 'aac', 'wav', 'mkv', 'avi'],
+      allowedExtensions: ['mp4', 'm4v', 'm4a', 'mov'],
       withData: true,
     );
     if (result != null && result.files.isNotEmpty) {
       final pf = result.files.first;
       final file = AppFile.fromPlatformFile(pf);
       mediaFile.value = file;
-      isVideo.value = !['.mp3', '.m4a', '.aac', '.wav'].contains(file.extension);
+      isVideo.value = file.extension != '.m4a';
     }
   }
 
@@ -151,7 +151,7 @@ class PolyglotController extends GetxController {
       } else if (['.mp4', '.m4v', '.mov', '.mkv', '.avi'].contains(ext)) {
         mediaFile.value = file;
         isVideo.value = true;
-      } else if (['.mp3', '.m4a', '.aac', '.wav'].contains(ext)) {
+      } else if (ext == '.m4a') {
         mediaFile.value = file;
         isVideo.value = false;
       } else if (ext == '.pdf') {

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:image/image.dart' as img;
-import 'image_ico_engine.dart';
+import 'mp4_box_engine.dart';
 
 /// Information about a single file stored inside an embedded ZIP archive.
 class ZipEntryInfo {
@@ -531,19 +531,10 @@ class PolyglotInspector {
     }
 
     bool isVideoMedia = false;
-    if (isStandaloneMp3) {
-      audioCodec ??= 'MP3 MPEG-1/2 Audio';
-      isVideoMedia = false;
-    } else if (isStandaloneWav) {
-      audioCodec ??= 'PCM 16-bit WAV';
-      isVideoMedia = false;
-    } else if (isStandaloneAac) {
-      audioCodec ??= 'AAC ADTS Stream';
-      isVideoMedia = false;
-    } else if (isStandaloneM4a) {
+    if (isStandaloneM4a) {
       audioCodec ??= 'AAC Audio (M4A)';
       isVideoMedia = false;
-    } else if (isAudioExtension) {
+    } else if (isAudioExtension && !isStandaloneMp4) {
       audioCodec ??= 'Audio Stream';
       isVideoMedia = false;
     } else if (hasSecondaryFtyp || isStandaloneMp4) {
@@ -654,9 +645,17 @@ class PolyglotInspector {
     if (hasIco && hasSecondaryFtyp) {
       // Dual-purpose MP4 container payload starts at offset 256
       if (bytes.length > 256) {
-        extractedMediaBytes = bytes.sublist(256);
+        final extractedSlice = Uint8List.fromList(bytes.sublist(256));
+        try {
+          final extractedBoxes = Mp4BoxEngine.parseTopLevelBoxes(extractedSlice);
+          final moovBox = extractedBoxes.firstWhere((b) => b.type == 'moov');
+          final moovData = Uint8List.fromList(extractedSlice.sublist(moovBox.offset, moovBox.offset + moovBox.size));
+          Mp4BoxEngine.shiftChunkOffsets(moovData, -256);
+          extractedSlice.setRange(moovBox.offset, moovBox.offset + moovBox.size, moovData);
+        } catch (_) {}
+        extractedMediaBytes = extractedSlice;
         if (!isVideoMedia) {
-          extractedAudioBytes = bytes.sublist(256);
+          extractedAudioBytes = extractedSlice;
         }
       }
     } else {

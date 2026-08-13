@@ -307,19 +307,19 @@ void main() {
 
     controller.selectedViewMode.value = 1;
     controller.inspectionResult.value = PolyglotInspectionResult(
-      fileName: 'music_track.mp3',
+      fileName: 'music_track.m4a',
       fileSize: 32000,
-      headerBytes: Uint8List.fromList([0x49, 0x44, 0x33, 0x04, 0x00, 0x00]),
+      headerBytes: Uint8List.fromList([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]),
       extraHeaderString: '',
       hasIcoHeader: false,
       hasSecondaryFtyp: false,
       hasHtmlWrapper: false,
       hasPdfStream: false,
       hasZipEocd: false,
-      detectedFormats: ['.mp3'],
-      rawBytes: Uint8List.fromList([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]),
+      detectedFormats: ['.m4a'],
+      rawBytes: Uint8List.fromList([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]),
       mediaInfo: const MediaMetadataInfo(
-        audioCodec: 'MP3 MPEG-1/2 Audio',
+        audioCodec: 'AAC Audio (M4A)',
         isVideo: false,
       ),
     );
@@ -331,8 +331,8 @@ void main() {
     // Verify Audio Player Preview is rendered
     expect(find.byType(AudioPlayerPreview), findsOneWidget);
     expect(find.text('Interactive Audio Player'), findsOneWidget);
-    expect(find.text('.MP3'), findsOneWidget);
+    expect(find.text('.M4A'), findsOneWidget);
     expect(find.text('Export Audio'), findsOneWidget);
-    expect(find.text('Codec: MP3 MPEG-1/2 Audio', findRichText: true), findsOneWidget);
+    expect(find.text('Codec: AAC Audio (M4A)', findRichText: true), findsOneWidget);
   });
 }

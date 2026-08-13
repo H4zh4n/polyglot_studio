@@ -82,40 +82,23 @@ void main() {
   });
 
   group('PolyglotInspector Media Tests', () {
-    test('Inspects standalone MP3 audio signature', () {
-      final mp3Bytes = Uint8List.fromList([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10]);
-      final res = PolyglotInspector.inspect(bytes: mp3Bytes, fileName: 'track.mp3');
+    test('Inspects standalone M4A audio signature', () {
+      final m4aBytes = Uint8List.fromList([
+        0x00, 0x00, 0x00, 0x20, // size 32
+        0x66, 0x74, 0x79, 0x70, // ftyp
+        0x4D, 0x34, 0x41, 0x20, // M4A
+        0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73, 0x6F, 0x6D,
+        0x69, 0x73, 0x6F, 0x32,
+        0x61, 0x76, 0x63, 0x31,
+        0x6D, 0x70, 0x34, 0x31,
+      ]);
+      final res = PolyglotInspector.inspect(bytes: m4aBytes, fileName: 'track.m4a');
 
-      expect(res.detectedFormats.contains('.mp3'), isTrue);
+      expect(res.detectedFormats.contains('.m4a'), isTrue);
       expect(res.detectedFormats.contains('.mp4'), isFalse);
       expect(res.mediaInfo.isVideo, isFalse);
       expect(res.rawBytes, isNotNull);
-    });
-
-    test('MP3 with random binary bytes containing mdat is not detected as MP4', () {
-      final mp3Bytes = Uint8List.fromList([
-        0xFF, 0xFB, 0x90, 0x64, // MPEG frame sync
-        0x6D, 0x64, 0x61, 0x74, // 'mdat' binary occurrence
-        0x00, 0x01, 0x02, 0x03,
-      ]);
-      final res = PolyglotInspector.inspect(bytes: mp3Bytes, fileName: 'podcast.mp3');
-
-      expect(res.detectedFormats.contains('.mp3'), isTrue);
-      expect(res.detectedFormats.contains('.mp4'), isFalse);
-      expect(res.mediaInfo.isVideo, isFalse);
-    });
-
-    test('Inspects standalone WAV audio signature', () {
-      final wavBytes = Uint8List.fromList([
-        0x52, 0x49, 0x46, 0x46, // RIFF
-        0x24, 0x00, 0x00, 0x00,
-        0x57, 0x41, 0x56, 0x45, // WAVE
-      ]);
-      final res = PolyglotInspector.inspect(bytes: wavBytes, fileName: 'sound.wav');
-
-      expect(res.detectedFormats.contains('.wav'), isTrue);
-      expect(res.detectedFormats.contains('.mp4'), isFalse);
-      expect(res.mediaInfo.isVideo, isFalse);
     });
 
     test('Inspects standalone MP4 video signature', () {
@@ -136,34 +119,46 @@ void main() {
       expect(res.rawBytes, isNotNull);
     });
 
-    test('PolyglotGenerator combines PNG Image and MP3 audio into Polyglot and inspector extracts audio', () async {
+    test('PolyglotGenerator combines PNG Image and MP4 video into Polyglot and inspector extracts media', () async {
       final testImg = img.Image(width: 16, height: 16);
       img.fill(testImg, color: img.ColorRgba8(0, 0, 255, 255));
       final pngBytes = Uint8List.fromList(img.encodePng(testImg));
 
-      final rawMp3 = Uint8List.fromList([
-        0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ID3v2 header
-        0xFF, 0xFB, 0x90, 0x64, 0x00, 0x00, 0x00, 0x00, // MPEG audio frames
+      final rawMp4 = Uint8List.fromList([
+        0x00, 0x00, 0x00, 0x20, // size 32
+        0x66, 0x74, 0x79, 0x70, // ftyp
+        0x69, 0x73, 0x6F, 0x6D, // isom
+        0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73, 0x6F, 0x6D,
+        0x69, 0x73, 0x6F, 0x32,
+        0x61, 0x76, 0x63, 0x31,
+        0x6D, 0x70, 0x34, 0x31,
+        0x00, 0x00, 0x00, 0x08, // mdat header
+        0x6D, 0x64, 0x61, 0x74,
       ]);
 
       final result = await PolyglotGenerator.generate(PolyglotInputs(
         imageBytes: pngBytes,
         imageName: 'cover.png',
-        mediaBytes: rawMp3,
-        mediaName: 'song.mp3',
-        isVideo: false,
+        mediaBytes: rawMp4,
+        mediaName: 'video.mp4',
+        isVideo: true,
       ));
 
-      expect(result.data.length > 50, isTrue);
+      expect(result.data.length > 288, isTrue);
       expect(result.supportedExtensions.contains('.ico'), isTrue);
-      expect(result.supportedExtensions.contains('.mp3'), isTrue);
+      expect(result.supportedExtensions.contains('.mp4'), isTrue);
 
       // Now inspect the generated polyglot
-      final inspected = PolyglotInspector.inspect(bytes: result.data, fileName: 'polyglot.ico.mp3');
-      expect(inspected.detectedFormats.contains('.mp3'), isTrue);
+      final inspected = PolyglotInspector.inspect(bytes: result.data, fileName: 'polyglot.ico.mp4');
+      expect(inspected.hasIcoHeader, isTrue);
+      expect(inspected.hasSecondaryFtyp, isTrue);
+      expect(inspected.detectedFormats.contains('.ico'), isTrue);
       expect(inspected.detectedFormats.contains('.png'), isTrue);
+      expect(inspected.detectedFormats.contains('.mp4'), isTrue);
       expect(inspected.extractedImageBytes, isNotNull);
-      expect(inspected.extractedAudioBytes, isNotNull);
+      expect(inspected.extractedMediaBytes, isNotNull);
+      expect(inspected.extractedMediaBytes!.length > 32, isTrue);
     });
   });
 }

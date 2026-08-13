@@ -73,12 +73,10 @@ class PolyglotGenerator {
     }
 
     final finalBytes = outputBuilder.toBytes();
-
-    // Calculate PNG offset for result model
     final htmlLen = inputs.htmlContent != null && inputs.htmlContent!.isNotEmpty
         ? ('--><style>body{font-size:0}</style><div style=font-size:initial>${inputs.htmlContent}</div><!--').length
         : 0;
-    final pngOffset = isMp4Container ? (288 + 8 + htmlLen) : (288 + htmlLen);
+    final pngOffset = 288 + 8 + htmlLen;
 
     return PolyglotResult(
       data: finalBytes,
