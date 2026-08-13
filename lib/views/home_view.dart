@@ -61,33 +61,21 @@ class _HomeViewState extends State<HomeView> {
               ),
               if (version.isNotEmpty) ...[
                 const SizedBox(width: 6),
-                Tooltip(
-                  message: 'App Info & Build Details',
-                  child: InkWell(
-                    onTap: () => AboutAppDialog.show(
-                      context,
-                      version: controller.appVersion.value,
-                      buildNumber: controller.appBuildNumber.value,
-                      appName: controller.appName.value,
-                    ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
                     borderRadius: BorderRadius.circular(4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceElevated,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppTheme.borderSubtle),
-                      ),
-                      child: Text(
-                        'v$version',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textMuted,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
+                    border: Border.all(color: AppTheme.borderSubtle),
+                  ),
+                  child: Text(
+                    'v$version',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textMuted,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
