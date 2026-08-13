@@ -6,6 +6,7 @@
 
 **Zero-Dependency Multi-Format Media Polyglot Generator & Binary Inspector**
 
+[![Release](https://img.shields.io/badge/Release-v1.0.0-00D26A?logo=github)](https://github.com/H4zh4n/polyglot_studio/releases)
 [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![Platform](https://img.shields.io/badge/Platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS%20%7C%20Web-0D0F12)](#-platform-support)
@@ -137,16 +138,28 @@ Byte Offset:
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### 📦 Download Pre-Built Binaries (Recommended)
+
+If you simply want to use Polyglot Studio without setting up Flutter or Dart from source, download pre-compiled executables directly from the **[GitHub Releases](https://github.com/H4zh4n/polyglot_studio/releases)** page:
+
+* 🪟 **Windows Desktop**: Download `PolyglotStudio_vx.x.x_windows.zip` (extract anywhere and run `PolyglotStudio.exe`).
+* 📱 **Android**: Download `PolyglotStudio_vx.x.x_android.apk` (install directly on Android 5.0+ devices or emulators).
+* 💻 **CLI Tool**: Download the pre-compiled `beheader` native binary for headless / automated scripting.
+
+---
+
+### 🛠️ Building & Running from Source
+
+#### Prerequisites
 
 - [Flutter SDK](https://flutter.dev/docs/get-started/install) (version 3.0.0 or higher)
 - [Dart SDK](https://dart.dev/get-dart) (included with Flutter)
 
-### Installation & Run
+#### Installation & Run
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/polyglot_studio.git
+   git clone https://github.com/H4zh4n/polyglot_studio.git
    cd polyglot_studio
    ```
 
