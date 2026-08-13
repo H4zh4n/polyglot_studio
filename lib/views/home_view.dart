@@ -10,8 +10,15 @@ import 'inspector/polyglot_inspector_view.dart';
 import 'mobile/mobile_home_view.dart';
 
 /// Master responsive view that switches dynamically between Generator Studio and Header/Payload Inspector.
-class HomeView extends StatelessWidget {
+class HomeView extends StatefulWidget {
   const HomeView({super.key});
+
+  @override
+  State<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<HomeView> {
+  bool _isDraggingHover = false;
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +26,7 @@ class HomeView extends StatelessWidget {
 
     return Obx(() {
       final mode = controller.selectedViewMode.value;
+      final isAnalyzing = controller.isAnalyzingDroppedFile.value;
 
       return Scaffold(
         appBar: AppBar(
@@ -79,7 +87,10 @@ class HomeView extends StatelessWidget {
           ],
         ),
         body: DropTarget(
+          onDragEntered: (_) => setState(() => _isDraggingHover = true),
+          onDragExited: (_) => setState(() => _isDraggingHover = false),
           onDragDone: (detail) {
+            setState(() => _isDraggingHover = false);
             final appFiles = detail.files.map((f) => AppFile.fromXFile(f)).toList();
             if (controller.selectedViewMode.value == 1 && appFiles.isNotEmpty) {
               controller.inspectFile(appFiles.first);
@@ -87,22 +98,117 @@ class HomeView extends StatelessWidget {
               controller.handleDroppedFiles(appFiles);
             }
           },
-          child: IndexedStack(
-            index: mode,
+          child: Stack(
             children: [
-              // Mode 0: Generator Studio (Responsive Desktop / Mobile)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth >= 900) {
-                    return const DesktopHomeView();
-                  } else {
-                    return const MobileHomeView();
-                  }
-                },
+              IndexedStack(
+                index: mode,
+                children: [
+                  // Mode 0: Generator Studio (Responsive Desktop / Mobile)
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth >= 900) {
+                        return const DesktopHomeView();
+                      } else {
+                        return const MobileHomeView();
+                      }
+                    },
+                  ),
+
+                  // Mode 1: Dedicated Header & Payload Inspector
+                  const PolyglotInspectorView(),
+                ],
               ),
 
-              // Mode 1: Dedicated Header & Payload Inspector
-              const PolyglotInspectorView(),
+              // 1. Drag Hover Visual Indication
+              if (_isDraggingHover)
+                Positioned.fill(
+                  child: Container(
+                    margin: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.accent.withAlpha(180), width: 2),
+                    ),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F1216).withAlpha(230),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.borderSubtle),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black45, blurRadius: 12),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.file_download_outlined, size: 20, color: AppTheme.accent),
+                            SizedBox(width: 10),
+                            Text(
+                              'Drop files to inspect polyglot binary signatures or assign to Studio',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 2. Active File Parsing & Polyglot Detection Feedback Toast
+              if (isAnalyzing)
+                Positioned(
+                  bottom: 24,
+                  left: 16,
+                  right: 16,
+                  child: Center(
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F1216).withAlpha(245),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.accent.withAlpha(120), width: 1.2),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, 4)),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2.2, color: AppTheme.accent),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Inspecting "${controller.analyzingFileName.value}"...',
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  controller.analyzingStatus.value.isNotEmpty
+                                      ? controller.analyzingStatus.value
+                                      : 'Analyzing binary headers and scanning for polyglot layers...',
+                                  style: const TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

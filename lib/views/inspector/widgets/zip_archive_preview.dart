@@ -3,7 +3,7 @@ import 'dart:io' show Directory, File, Platform, Process;
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/gestures.dart' show EagerGestureRecognizer, GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
@@ -1191,49 +1191,68 @@ class _ZipEmbeddedPdfPreviewState extends State<_ZipEmbeddedPdfPreview> {
   String? _error;
   double _scale = 1.0;
   bool _isDragging = false;
+  Offset? _lastPanPos;
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
-      final scrollDelta = event.scrollDelta.dy;
-      if (scrollDelta == 0) return;
+      final isCtrlOrMeta = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
+      if (isCtrlOrMeta) {
+        GestureBinding.instance.pointerSignalResolver.register(event, (resolvedEvent) {
+          if (resolvedEvent is PointerScrollEvent) {
+            final scrollDelta = resolvedEvent.scrollDelta.dy;
+            if (scrollDelta == 0) return;
 
-      final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
-      final newScale = (_scale * zoomFactor).clamp(0.8, 4.5);
-      if ((newScale - _scale).abs() < 0.001) return;
+            final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
+            final newScale = (_scale * zoomFactor).clamp(0.8, 4.5);
+            if ((newScale - _scale).abs() < 0.001) return;
 
-      final focalPoint = event.localPosition;
-      final currentMatrix = _transformController.value;
-      final currentTrans = currentMatrix.getTranslation();
+            final effectiveFactor = newScale / _scale;
+            final focalPoint = resolvedEvent.localPosition;
+            final currentMatrix = _transformController.value;
+            final currentTrans = currentMatrix.getTranslation();
 
-      final double tx = focalPoint.dx - zoomFactor * (focalPoint.dx - currentTrans.x);
-      final double ty = focalPoint.dy - zoomFactor * (focalPoint.dy - currentTrans.y);
+            final double tx = focalPoint.dx - effectiveFactor * (focalPoint.dx - currentTrans.x);
+            final double ty = focalPoint.dy - effectiveFactor * (focalPoint.dy - currentTrans.y);
 
-      if (newScale <= 1.02 && newScale >= 0.98) {
-        _transformController.value = Matrix4.identity();
-      } else {
-        final Matrix4 newMatrix = Matrix4.identity()
-          ..setEntry(0, 0, newScale)
-          ..setEntry(1, 1, newScale)
-          ..setEntry(0, 3, tx)
-          ..setEntry(1, 3, ty);
-        _transformController.value = newMatrix;
+            _scale = newScale;
+            if (newScale <= 1.02 && newScale >= 0.98 && tx.abs() < 2 && ty.abs() < 2) {
+              _scale = 1.0;
+              _transformController.value = Matrix4.identity();
+            } else {
+              final Matrix4 newMatrix = Matrix4.identity()
+                ..setEntry(0, 0, newScale)
+                ..setEntry(1, 1, newScale)
+                ..setEntry(2, 2, 1.0)
+                ..setEntry(0, 3, tx)
+                ..setEntry(1, 3, ty);
+              _transformController.value = newMatrix;
+            }
+            setState(() {});
+          }
+        });
       }
-      setState(() {});
     }
   }
 
   void _toggleDoubleTapZoom(TapDownDetails details) {
-    final scale = _transformController.value.getMaxScaleOnAxis();
-    if (scale > 1.25) {
+    if (_scale > 1.25) {
+      _scale = 1.0;
       _transformController.value = Matrix4.identity();
     } else {
       final position = details.localPosition;
-      final double targetScale = 2.0;
+      const double targetScale = 2.0;
+      final effectiveFactor = targetScale / _scale;
+      final currentTrans = _transformController.value.getTranslation();
+      final double tx = position.dx - effectiveFactor * (position.dx - currentTrans.x);
+      final double ty = position.dy - effectiveFactor * (position.dy - currentTrans.y);
+
+      _scale = targetScale;
       final Matrix4 matrix = Matrix4.identity()
         ..setEntry(0, 0, targetScale)
         ..setEntry(1, 1, targetScale)
-        ..setEntry(0, 3, -position.dx * (targetScale - 1.0))
-        ..setEntry(1, 3, -position.dy * (targetScale - 1.0));
+        ..setEntry(2, 2, 1.0)
+        ..setEntry(0, 3, tx)
+        ..setEntry(1, 3, ty);
       _transformController.value = matrix;
     }
     setState(() {});
@@ -1377,33 +1396,63 @@ class _ZipEmbeddedPdfPreviewState extends State<_ZipEmbeddedPdfPreview> {
 
     return Column(
       children: [
-        // Interactive Page View Canvas with Mouse Wheel Zoom and Frictionless Drag
+        // Interactive Page View Canvas with Mouse Wheel Zoom and Frictionless Drag (Isolated from drawer scroll)
         Expanded(
-          child: Listener(
-            onPointerSignal: _onPointerSignal,
-            child: MouseRegion(
-              cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-              child: GestureDetector(
-                onDoubleTapDown: _toggleDoubleTapZoom,
-                child: InteractiveViewer(
-                  transformationController: _transformController,
-                  panEnabled: true,
-                  scaleEnabled: true,
-                  minScale: 0.8,
-                  maxScale: 4.5,
-                  boundaryMargin: const EdgeInsets.all(100),
-                  onInteractionStart: (_) => setState(() => _isDragging = true),
-                  onInteractionEnd: (_) => setState(() => _isDragging = false),
-                  child: PdfView(
-                    controller: _pdfController!,
-                    onPageChanged: (page) => setState(() => _currentPage = page),
-                    builders: PdfViewBuilders<DefaultBuilderOptions>(
-                      options: const DefaultBuilderOptions(),
-                      documentLoaderBuilder: (_) => const Center(
-                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
-                      ),
-                      pageLoaderBuilder: (_) => const Center(
-                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
+          child: RawGestureDetector(
+            gestures: <Type, GestureRecognizerFactory>{
+              EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+                () => EagerGestureRecognizer(),
+                (EagerGestureRecognizer instance) {},
+              ),
+            },
+            child: Listener(
+              onPointerSignal: _onPointerSignal,
+              onPointerDown: (event) {
+                _lastPanPos = event.position;
+                setState(() => _isDragging = true);
+              },
+              onPointerMove: (event) {
+                if (_lastPanPos != null) {
+                  final delta = event.position - _lastPanPos!;
+                  _lastPanPos = event.position;
+                  final currentMatrix = _transformController.value;
+                  final trans = currentMatrix.getTranslation();
+                  final matrix = Matrix4.identity()
+                    ..setEntry(0, 0, _scale)
+                    ..setEntry(1, 1, _scale)
+                    ..setEntry(0, 3, trans.x + delta.dx)
+                    ..setEntry(1, 3, trans.y + delta.dy);
+                  _transformController.value = matrix;
+                  setState(() {});
+                }
+              },
+              onPointerUp: (_) {
+                _lastPanPos = null;
+                setState(() => _isDragging = false);
+              },
+              onPointerCancel: (_) {
+                _lastPanPos = null;
+                setState(() => _isDragging = false);
+              },
+              child: MouseRegion(
+                cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+                child: GestureDetector(
+                  onDoubleTapDown: _toggleDoubleTapZoom,
+                  child: ClipRect(
+                    child: Transform(
+                      transform: _transformController.value,
+                      child: PdfView(
+                        controller: _pdfController!,
+                        onPageChanged: (page) => setState(() => _currentPage = page),
+                        builders: PdfViewBuilders<DefaultBuilderOptions>(
+                          options: const DefaultBuilderOptions(),
+                          documentLoaderBuilder: (_) => const Center(
+                            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
+                          ),
+                          pageLoaderBuilder: (_) => const Center(
+                            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent)),
+                          ),
+                        ),
                       ),
                     ),
                   ),

@@ -1,6 +1,6 @@
 import 'dart:io' show Directory, File, Platform, Process;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
+import 'package:flutter/gestures.dart' show EagerGestureRecognizer, GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -45,6 +45,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
   String? _pdfError;
   double _currentScale = 1.0;
   bool _isDragging = false;
+  Offset? _lastPanPos;
 
   @override
   void initState() {
@@ -156,64 +157,98 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent) {
-      final scrollDelta = event.scrollDelta.dy;
-      if (scrollDelta == 0) return;
+      final isCtrlOrMeta = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
+      if (isCtrlOrMeta) {
+        // Register with pointerSignalResolver so parent Scrollable (SingleChildScrollView) does NOT scroll at all!
+        GestureBinding.instance.pointerSignalResolver.register(event, (resolvedEvent) {
+          if (resolvedEvent is PointerScrollEvent) {
+            final scrollDelta = resolvedEvent.scrollDelta.dy;
+            if (scrollDelta == 0) return;
 
-      final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
-      final newScale = (_currentScale * zoomFactor).clamp(0.8, 4.5);
-      if ((newScale - _currentScale).abs() < 0.001) return;
+            final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
+            final newScale = (_currentScale * zoomFactor).clamp(0.8, 4.5);
+            if ((newScale - _currentScale).abs() < 0.001) return;
 
-      final focalPoint = event.localPosition;
-      final currentMatrix = _transformationController.value;
-      final currentTrans = currentMatrix.getTranslation();
+            final effectiveFactor = newScale / _currentScale;
+            final focalPoint = resolvedEvent.localPosition;
+            final currentMatrix = _transformationController.value;
+            final currentTrans = currentMatrix.getTranslation();
 
-      final double tx = focalPoint.dx - zoomFactor * (focalPoint.dx - currentTrans.x);
-      final double ty = focalPoint.dy - zoomFactor * (focalPoint.dy - currentTrans.y);
+            final double tx = focalPoint.dx - effectiveFactor * (focalPoint.dx - currentTrans.x);
+            final double ty = focalPoint.dy - effectiveFactor * (focalPoint.dy - currentTrans.y);
 
-      if (newScale <= 1.02 && newScale >= 0.98) {
-        _transformationController.value = Matrix4.identity();
-      } else {
-        final Matrix4 newMatrix = Matrix4.identity()
-          ..setEntry(0, 0, newScale)
-          ..setEntry(1, 1, newScale)
-          ..setEntry(0, 3, tx)
-          ..setEntry(1, 3, ty);
-        _transformationController.value = newMatrix;
+            _currentScale = newScale;
+            if (newScale <= 1.02 && newScale >= 0.98 && tx.abs() < 2 && ty.abs() < 2) {
+              _currentScale = 1.0;
+              _transformationController.value = Matrix4.identity();
+            } else {
+              final Matrix4 newMatrix = Matrix4.identity()
+                ..setEntry(0, 0, newScale)
+                ..setEntry(1, 1, newScale)
+                ..setEntry(2, 2, 1.0)
+                ..setEntry(0, 3, tx)
+                ..setEntry(1, 3, ty);
+              _transformationController.value = newMatrix;
+            }
+            setState(() {});
+          }
+        });
       }
-      setState(() {});
     }
   }
 
   void _toggleDoubleTapZoom(TapDownDetails details) {
-    final scale = _transformationController.value.getMaxScaleOnAxis();
-    if (scale > 1.25) {
+    if (_currentScale > 1.25) {
+      _currentScale = 1.0;
       _transformationController.value = Matrix4.identity();
     } else {
       final position = details.localPosition;
-      final double targetScale = 2.0;
-      final Matrix4 matrix = Matrix4.identity()
+      const double targetScale = 2.0;
+      final effectiveFactor = targetScale / _currentScale;
+      final currentTrans = _transformationController.value.getTranslation();
+      final double tx = position.dx - effectiveFactor * (position.dx - currentTrans.x);
+      final double ty = position.dy - effectiveFactor * (position.dy - currentTrans.y);
+
+      _currentScale = targetScale;
+      final matrix = Matrix4.identity()
         ..setEntry(0, 0, targetScale)
         ..setEntry(1, 1, targetScale)
-        ..setEntry(0, 3, -position.dx * (targetScale - 1.0))
-        ..setEntry(1, 3, -position.dy * (targetScale - 1.0));
+        ..setEntry(2, 2, 1.0)
+        ..setEntry(0, 3, tx)
+        ..setEntry(1, 3, ty);
       _transformationController.value = matrix;
     }
     setState(() {});
   }
 
   void _zoomIn() {
-    final newScale = (_currentScale + 0.3).clamp(0.8, 4.0);
-    _transformationController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+    final newScale = (_currentScale + 0.3).clamp(0.8, 4.5);
+    _currentScale = newScale;
+    final currentMatrix = _transformationController.value;
+    final trans = currentMatrix.getTranslation();
+    _transformationController.value = Matrix4.identity()
+      ..setEntry(0, 0, newScale)
+      ..setEntry(1, 1, newScale)
+      ..setEntry(0, 3, trans.x)
+      ..setEntry(1, 3, trans.y);
     setState(() {});
   }
 
   void _zoomOut() {
-    final newScale = (_currentScale - 0.3).clamp(0.8, 4.0);
-    _transformationController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+    final newScale = (_currentScale - 0.3).clamp(0.8, 4.5);
+    _currentScale = newScale;
+    final currentMatrix = _transformationController.value;
+    final trans = currentMatrix.getTranslation();
+    _transformationController.value = Matrix4.identity()
+      ..setEntry(0, 0, newScale)
+      ..setEntry(1, 1, newScale)
+      ..setEntry(0, 3, trans.x)
+      ..setEntry(1, 3, trans.y);
     setState(() {});
   }
 
   void _resetZoom() {
+    _currentScale = 1.0;
     _transformationController.value = Matrix4.identity();
     setState(() {});
   }
@@ -750,7 +785,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                   SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      'Click & drag to pan • Mouse wheel or pinch to zoom • Double-click to zoom in/out',
+                      'Click & drag to pan • Ctrl + Mouse wheel to zoom • Double-click to zoom in/out',
                       style: TextStyle(fontSize: 10, color: AppTheme.textSecondary, letterSpacing: -0.1),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -762,7 +797,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
           const SizedBox(height: 8),
 
-          // 3. In-App Interactive Pan & Zoom PDF Viewport
+          // 3. In-App Interactive Pan & Zoom PDF Viewport (Isolated from page scroll)
           Container(
             height: 420,
             width: double.infinity,
@@ -772,41 +807,70 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
               border: Border.all(color: AppTheme.borderSubtle.withAlpha(50)),
             ),
             clipBehavior: Clip.antiAlias,
-            child: Listener(
-              onPointerSignal: _onPointerSignal,
-              child: MouseRegion(
-                cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-                child: GestureDetector(
-                  onDoubleTapDown: _toggleDoubleTapZoom,
-                  child: InteractiveViewer(
-                    transformationController: _transformationController,
-                    panEnabled: true,
-                    scaleEnabled: true,
-                    minScale: 0.8,
-                    maxScale: 4.5,
-                    boundaryMargin: const EdgeInsets.all(120),
-                    clipBehavior: Clip.antiAlias,
-                    onInteractionStart: (_) => setState(() => _isDragging = true),
-                    onInteractionEnd: (_) => setState(() => _isDragging = false),
-                    child: PdfView(
-                      controller: _pdfController!,
-                      onPageChanged: (page) {
-                        setState(() {
-                          _currentPage = page;
-                        });
-                      },
-                      builders: PdfViewBuilders<DefaultBuilderOptions>(
-                        options: const DefaultBuilderOptions(
-                          loaderSwitchDuration: Duration(milliseconds: 150),
-                        ),
-                        documentLoaderBuilder: (_) => const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
-                        ),
-                        pageLoaderBuilder: (_) => const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
-                        ),
-                        errorBuilder: (_, error) => Center(
-                          child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+            child: RawGestureDetector(
+              gestures: <Type, GestureRecognizerFactory>{
+                EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
+                  () => EagerGestureRecognizer(),
+                  (EagerGestureRecognizer instance) {},
+                ),
+              },
+              child: Listener(
+                onPointerSignal: _onPointerSignal,
+                onPointerDown: (event) {
+                  _lastPanPos = event.position;
+                  setState(() => _isDragging = true);
+                },
+                onPointerMove: (event) {
+                  if (_lastPanPos != null) {
+                    final delta = event.position - _lastPanPos!;
+                    _lastPanPos = event.position;
+                    final currentMatrix = _transformationController.value;
+                    final trans = currentMatrix.getTranslation();
+                    final matrix = Matrix4.identity()
+                      ..setEntry(0, 0, _currentScale)
+                      ..setEntry(1, 1, _currentScale)
+                      ..setEntry(0, 3, trans.x + delta.dx)
+                      ..setEntry(1, 3, trans.y + delta.dy);
+                    _transformationController.value = matrix;
+                    setState(() {});
+                  }
+                },
+                onPointerUp: (_) {
+                  _lastPanPos = null;
+                  setState(() => _isDragging = false);
+                },
+                onPointerCancel: (_) {
+                  _lastPanPos = null;
+                  setState(() => _isDragging = false);
+                },
+                child: MouseRegion(
+                  cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+                  child: GestureDetector(
+                    onDoubleTapDown: _toggleDoubleTapZoom,
+                    child: ClipRect(
+                      child: Transform(
+                        transform: _transformationController.value,
+                        child: PdfView(
+                          controller: _pdfController!,
+                          onPageChanged: (page) {
+                            setState(() {
+                              _currentPage = page;
+                            });
+                          },
+                          builders: PdfViewBuilders<DefaultBuilderOptions>(
+                            options: const DefaultBuilderOptions(
+                              loaderSwitchDuration: Duration(milliseconds: 150),
+                            ),
+                            documentLoaderBuilder: (_) => const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                            ),
+                            pageLoaderBuilder: (_) => const Center(
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                            ),
+                            errorBuilder: (_, error) => Center(
+                              child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+                            ),
+                          ),
                         ),
                       ),
                     ),

@@ -38,6 +38,11 @@ class PolyglotController extends GetxController {
   final RxBool isInspecting = false.obs;
   final RxInt selectedViewMode = 0.obs; // 0 = Generator Studio, 1 = Inspector & Payloads
 
+  // Background Drop Inspection Feedback
+  final RxBool isAnalyzingDroppedFile = false.obs;
+  final RxString analyzingFileName = ''.obs;
+  final RxString analyzingStatus = ''.obs;
+
   // Validation
   bool get canGenerate => imageFile.value != null && mediaFile.value != null && !isGenerating.value;
 
@@ -148,17 +153,22 @@ class PolyglotController extends GetxController {
   Future<void> handleDroppedFiles(List<AppFile> files) async {
     if (files.isEmpty) return;
 
-    // Check if the primary dropped file is a polyglot binary
     final firstFile = files.first;
+    isAnalyzingDroppedFile.value = true;
+    analyzingFileName.value = firstFile.name;
+    analyzingStatus.value = 'Reading bytes and parsing file structure...';
+
     try {
       final bytes = await firstFile.readAsBytes();
       if (bytes.isNotEmpty) {
+        analyzingStatus.value = 'Scanning binary signatures for polyglot layers (PDF, ZIP, MP4, HTML)...';
         final inspection = await compute(_runInspectInIsolate, _InspectParams(bytes, firstFile.name));
         final isPolyglot = inspection.detectedFormats.length >= 2 ||
             (inspection.hasIcoHeader && inspection.hasSecondaryFtyp) ||
             (inspection.hasZipEocd && (inspection.hasIcoHeader || inspection.pngOffset != null || inspection.detectedFormats.length > 1));
 
         if (isPolyglot) {
+          isAnalyzingDroppedFile.value = false;
           final context = Get.context;
           if (context != null && context.mounted) {
             final shouldInspect = await PolyglotDetectedDialog.show(
@@ -175,7 +185,12 @@ class PolyglotController extends GetxController {
           }
         }
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      isAnalyzingDroppedFile.value = false;
+      analyzingFileName.value = '';
+      analyzingStatus.value = '';
+    }
 
     // Otherwise assign files to Studio asset inputs
     assignFilesToStudio(files);

@@ -79,32 +79,71 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> with SingleTick
     }
   }
 
+  void _zoomAt(double factor, Offset focalPoint) {
+    final currentMatrix = _transformationController.value;
+    final currentScale = _currentScale;
+    final newScale = (currentScale * factor).clamp(_minScale, _maxScale);
+    if ((newScale - currentScale).abs() < 0.001) return;
+
+    final effectiveFactor = newScale / currentScale;
+    final currentTrans = currentMatrix.getTranslation();
+
+    final tx = focalPoint.dx - effectiveFactor * (focalPoint.dx - currentTrans.x);
+    final ty = focalPoint.dy - effectiveFactor * (focalPoint.dy - currentTrans.y);
+
+    _currentScale = newScale;
+    if (newScale <= 1.02 && newScale >= 0.98 && tx.abs() < 2 && ty.abs() < 2) {
+      _currentScale = 1.0;
+      _transformationController.value = Matrix4.identity();
+    } else {
+      final matrix = Matrix4.identity()
+        ..setEntry(0, 0, newScale)
+        ..setEntry(1, 1, newScale)
+        ..setEntry(2, 2, 1.0)
+        ..setEntry(0, 3, tx)
+        ..setEntry(1, 3, ty);
+      _transformationController.value = matrix;
+    }
+    setState(() {});
+  }
+
   void _zoomBy(double factor) {
-    final newScale = (_currentScale * factor).clamp(_minScale, _maxScale);
-    final matrix = Matrix4.diagonal3Values(newScale, newScale, 1.0);
-    _transformationController.value = matrix;
+    final size = MediaQuery.maybeOf(context)?.size ?? const Size(800, 600);
+    _zoomAt(factor, Offset(size.width / 2, size.height / 2));
   }
 
   void _resetZoom() {
+    _currentScale = 1.0;
     _transformationController.value = Matrix4.identity();
+    setState(() {});
   }
 
   void _zoom100Percent() {
+    _currentScale = 1.0;
     _transformationController.value = Matrix4.identity();
+    setState(() {});
   }
 
   void _handleDoubleTapDown(TapDownDetails details) {
-    if (_currentScale > 1.2) {
-      // Reset to 1.0
+    if (_currentScale > 1.25) {
       _resetZoom();
     } else {
-      // Zoom into tapped point
       final position = details.localPosition;
       const targetScale = 2.5;
-      final x = -position.dx * (targetScale - 1);
-      final y = -position.dy * (targetScale - 1);
-      final matrix = Matrix4.translationValues(x, y, 0.0)..scaleByDouble(targetScale, targetScale, 1.0, 1.0);
+      final effectiveFactor = targetScale / _currentScale;
+      final currentTrans = _transformationController.value.getTranslation();
+      final tx = position.dx - effectiveFactor * (position.dx - currentTrans.x);
+      final ty = position.dy - effectiveFactor * (position.dy - currentTrans.y);
+
+      _currentScale = targetScale;
+      final matrix = Matrix4.identity()
+        ..setEntry(0, 0, targetScale)
+        ..setEntry(1, 1, targetScale)
+        ..setEntry(2, 2, 1.0)
+        ..setEntry(0, 3, tx)
+        ..setEntry(1, 3, ty);
       _transformationController.value = matrix;
+      setState(() {});
     }
   }
 
@@ -113,7 +152,7 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> with SingleTick
       final double dy = event.scrollDelta.dy;
       if (dy == 0) return;
       final factor = dy < 0 ? 1.15 : 0.85;
-      _zoomBy(factor);
+      _zoomAt(factor, event.localPosition);
     }
   }
 

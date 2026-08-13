@@ -1,8 +1,10 @@
 import 'dart:typed_data';
+
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:polyglot_core/polyglot_core.dart';
+
 import '../../controllers/polyglot_controller.dart';
 import '../../models/app_file.dart';
 import '../../theme/app_theme.dart';
@@ -46,7 +48,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 650;
-        final padding = isMobile ? const EdgeInsets.fromLTRB(16, 12, 16, 24) : const EdgeInsets.symmetric(horizontal: 24, vertical: 20);
+        final padding =
+            isMobile ? const EdgeInsets.fromLTRB(16, 12, 16, 24) : const EdgeInsets.symmetric(horizontal: 24, vertical: 20);
 
         return Obx(() {
           final res = controller.inspectionResult.value;
@@ -157,7 +160,7 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
               onPressed: () => controller.pickAndInspectFile(),
               icon: const Icon(Icons.file_open_outlined, size: 14),
               label: Text(
-                res != null ? 'Open Other File' : 'Open File to View',
+                res != null ? 'Open Other Files' : 'Open File to View',
                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               ),
             ),
@@ -231,7 +234,7 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
             onPressed: () => controller.pickAndInspectFile(),
             icon: const Icon(Icons.file_open_outlined, size: 15),
             label: Text(
-              res != null ? 'Open Other File' : 'Open File to View',
+              res != null ? 'Open Other Files' : 'Open File to View',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             ),
           ),
@@ -329,9 +332,7 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
               ),
               const SizedBox(height: 12),
               Text(
-                _isDragging
-                    ? 'Release to inspect file architecture'
-                    : 'Drop any polyglot or media file here to view & inspect',
+                _isDragging ? 'Release to inspect file architecture' : 'Drop any polyglot or media file here to view & inspect',
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                 textAlign: TextAlign.center,
               ),
@@ -380,7 +381,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
                 Expanded(
                   child: Text(
                     res.fileName,
-                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                    style: const TextStyle(
+                        fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -415,7 +417,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
           Expanded(
             child: Text(
               res.fileName,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              style: const TextStyle(
+                  fontSize: 12, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -452,7 +455,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
           Flexible(
             child: Text(
               ext,
-              style: const TextStyle(fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              style: const TextStyle(
+                  fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
@@ -679,7 +683,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
                         ),
                         child: Text(
                           info.format!,
-                          style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.accent),
+                          style: const TextStyle(
+                              fontSize: 9.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.accent),
                         ),
                       ),
                     ],
@@ -755,7 +760,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Padding(
                           padding: EdgeInsets.all(20.0),
-                          child: Text('Raw image stream bytes extracted from container', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                          child: Text('Raw image stream bytes extracted from container',
+                              style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                         ),
                       ),
                       Positioned(
@@ -793,15 +799,11 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (info.width != null && info.height != null)
-                _buildInfoBadge('Resolution', '${info.width} × ${info.height} px'),
-              if (info.aspectRatioString.isNotEmpty)
-                _buildInfoBadge('Ratio', info.aspectRatioString),
-              if (info.colorDepth != null)
-                _buildInfoBadge('Color', '${info.colorDepth}bpp${info.hasAlpha ? ' (Alpha)' : ''}'),
+              if (info.width != null && info.height != null) _buildInfoBadge('Resolution', '${info.width} × ${info.height} px'),
+              if (info.aspectRatioString.isNotEmpty) _buildInfoBadge('Ratio', info.aspectRatioString),
+              if (info.colorDepth != null) _buildInfoBadge('Color', '${info.colorDepth}bpp${info.hasAlpha ? ' (Alpha)' : ''}'),
               _buildInfoBadge('Size', NumberUtils.formatSizeKb(imageBytes.length)),
-              if (res.pngOffset != null)
-                _buildInfoBadge('Stream Offset', 'Byte ${NumberUtils.formatInt(res.pngOffset!)}'),
+              if (res.pngOffset != null) _buildInfoBadge('Stream Offset', 'Byte ${NumberUtils.formatInt(res.pngOffset!)}'),
             ],
           ),
         ],
@@ -1045,7 +1047,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
             ),
             TextSpan(
               text: value,
-              style: const TextStyle(fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              style: const TextStyle(
+                  fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
             ),
           ],
         ),
@@ -1059,14 +1062,16 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
       return _buildInfo(
         icon: Icons.edit_note_outlined,
         title: 'Header Dead Space (Byte 22 .. 240)',
-        description: 'Between the initial ICO image directory (byte 22) and the MP4 secondary ftyp brand (byte 256) lies 218 bytes of dead space used for metadata, comments, or scripts.',
+        description:
+            'Between the initial ICO image directory (byte 22) and the MP4 secondary ftyp brand (byte 256) lies 218 bytes of dead space used for metadata, comments, or scripts.',
         offsetInfo: 'Capacity: 218 Bytes',
       );
     } else if (tabId == 'payload') {
       return _buildInfo(
         icon: Icons.attach_file_outlined,
         title: 'Appendable Binary Payload',
-        description: 'Raw binary payload appended before the archive boundary, accessible for direct extraction and analysis without corrupting media decoders.',
+        description:
+            'Raw binary payload appended before the archive boundary, accessible for direct extraction and analysis without corrupting media decoders.',
         offsetInfo: res.appendableOffset != null ? 'Byte ${NumberUtils.formatInt(res.appendableOffset!)}' : null,
       );
     }
@@ -1080,7 +1085,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
         return _buildInfo(
           icon: Icons.videocam_outlined,
           title: 'Video / Audio Container Execution (MP4 / ISOBMFF)',
-          description: 'Media decoders parse atom boxes starting from byte 0 and secondary ftyp brand at byte 256. Media samples stream from mdat without error.',
+          description:
+              'Media decoders parse atom boxes starting from byte 0 and secondary ftyp brand at byte 256. Media samples stream from mdat without error.',
           offsetInfo: res.hasSecondaryFtyp ? 'Secondary ftyp @ Byte 256' : 'ISO Atom Stream',
         );
       case '.mp3':
@@ -1097,14 +1103,16 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
         return _buildInfo(
           icon: Icons.image_outlined,
           title: 'Icon Resource Execution (ICO)',
-          description: 'Image decoders read byte 0 as an ICO directory header (00 00 01 00). The entry points directly to the 32bpp PNG image stream.',
+          description:
+              'Image decoders read byte 0 as an ICO directory header (00 00 01 00). The entry points directly to the 32bpp PNG image stream.',
           offsetInfo: 'Header: Byte 0 .. 22',
         );
       case '.png':
         return _buildInfo(
           icon: Icons.image_outlined,
           title: 'Embedded PNG Image Viewer Execution',
-          description: 'Image viewers load the embedded 32bpp PNG stream directly at the offset recorded in the ICO directory entry.',
+          description:
+              'Image viewers load the embedded 32bpp PNG stream directly at the offset recorded in the ICO directory entry.',
           offsetInfo: res.pngOffset != null ? 'Offset: Byte ${NumberUtils.formatInt(res.pngOffset!)}' : null,
         );
       case '.html':
@@ -1112,14 +1120,16 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
         return _buildInfo(
           icon: Icons.code_outlined,
           title: 'Web Browser Document Execution (HTML)',
-          description: 'Web browsers parse the HTML stream. Embedded stylesheet suppresses binary noise with font-size:0, presenting the clean webpage.',
+          description:
+              'Web browsers parse the HTML stream. Embedded stylesheet suppresses binary noise with font-size:0, presenting the clean webpage.',
           offsetInfo: 'HTML Stylesheet Injection',
         );
       case '.pdf':
         return _buildInfo(
           icon: Icons.picture_as_pdf_outlined,
           title: 'PDF Reader Document Execution',
-          description: 'PDF engines start from %PDF-1.4, encapsulate the MP4 body as an internal stream object, and resolve pages using the shifted xref table.',
+          description:
+              'PDF engines start from %PDF-1.4, encapsulate the MP4 body as an internal stream object, and resolve pages using the shifted xref table.',
           offsetInfo: res.pdfOffset != null ? 'Offset: Byte ${NumberUtils.formatInt(res.pdfOffset!)}' : null,
         );
       case '.zip':
@@ -1131,8 +1141,10 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
         return _buildInfo(
           icon: Icons.folder_zip_outlined,
           title: 'Archive Decompressor Execution ($tabId)',
-          description: 'Archive utilities scan backward from EOF to find the End of Central Directory (EOCD). All internal relative file header offsets are preserved.',
-          offsetInfo: res.zipOffset != null ? 'Central Dir: Byte ${NumberUtils.formatInt(res.zipOffset!)}' : 'EOCD at File Tail',
+          description:
+              'Archive utilities scan backward from EOF to find the End of Central Directory (EOCD). All internal relative file header offsets are preserved.',
+          offsetInfo:
+              res.zipOffset != null ? 'Central Dir: Byte ${NumberUtils.formatInt(res.zipOffset!)}' : 'EOCD at File Tail',
         );
       default:
         return _buildInfo(
@@ -1187,7 +1199,8 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
                       ),
                       child: Text(
                         offsetInfo,
-                        style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                            fontSize: 9.5, fontFamily: 'monospace', color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
                       ),
                     ),
                 ],
