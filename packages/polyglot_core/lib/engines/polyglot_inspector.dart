@@ -515,7 +515,7 @@ class PolyglotInspector {
       htmlInfo = _analyzeHtml(extractedHtmlContent);
     }
 
-    // 8. Check PDF stream & extract metadata
+    // 8. Check PDF stream & extract metadata across the entire byte buffer
     bool hasPdf = false;
     int? pdfOffset;
     Uint8List? extractedPdfBytes;
@@ -523,31 +523,46 @@ class PolyglotInspector {
     int pdfPageCount = 0;
     PdfMetadataInfo pdfInfo = const PdfMetadataInfo();
 
-    if (sampleString.contains('%PDF-') || sampleString.contains('1 0 obj')) {
+    // Scan bytes for %PDF- marker
+    int pdfStart = -1;
+    for (int i = 0; i <= bytes.length - 5; i++) {
+      if (bytes[i] == 0x25 && bytes[i + 1] == 0x50 && bytes[i + 2] == 0x44 && bytes[i + 3] == 0x46 && bytes[i + 4] == 0x2D) {
+        pdfStart = i;
+        break;
+      }
+    }
+
+    if (pdfStart != -1 || sampleString.contains('1 0 obj')) {
       hasPdf = true;
-      final idx = sampleString.indexOf('%PDF-');
-      if (idx >= 0) {
-        pdfOffset = idx;
-        final pdfSub = sampleString.substring(idx);
-        final verMatch = RegExp(r'%PDF-(\d+\.\d+)').firstMatch(pdfSub);
-        if (verMatch != null) {
-          pdfVersion = verMatch.group(1);
-        }
-        pdfPageCount = RegExp(r'/Type\s*/Page\b').allMatches(pdfSub).length;
-        if (pdfPageCount == 0 && pdfSub.contains('/Page')) pdfPageCount = 1;
+      pdfOffset = pdfStart != -1 ? pdfStart : 0;
 
-        final eofIdx = pdfSub.indexOf('%%EOF');
-        if (eofIdx != -1) {
-          extractedPdfBytes = bytes.sublist(idx, idx + eofIdx + 5);
-        } else {
-          extractedPdfBytes = bytes.sublist(idx);
+      // Find the last %%EOF marker in the entire file
+      int pdfEnd = -1;
+      if (pdfStart != -1) {
+        for (int i = bytes.length - 5; i >= pdfStart; i--) {
+          if (bytes[i] == 0x25 && bytes[i + 1] == 0x25 && bytes[i + 2] == 0x45 && bytes[i + 3] == 0x4F && bytes[i + 4] == 0x46) {
+            pdfEnd = i + 5;
+            // Include trailing newline/CR if present
+            while (pdfEnd < bytes.length && (bytes[pdfEnd] == 0x0D || bytes[pdfEnd] == 0x0A || bytes[pdfEnd] == 0x20)) {
+              pdfEnd++;
+            }
+            break;
+          }
         }
+      }
 
-        if (extractedPdfBytes.isNotEmpty) {
-          pdfInfo = _analyzePdf(extractedPdfBytes, pdfOffset);
-          pdfVersion = pdfInfo.version;
-          pdfPageCount = pdfInfo.pageCount;
-        }
+      if (pdfEnd != -1 && pdfStart != -1) {
+        extractedPdfBytes = Uint8List.fromList(bytes.sublist(pdfStart, pdfEnd));
+      } else if (pdfStart != -1) {
+        extractedPdfBytes = Uint8List.fromList(bytes.sublist(pdfStart));
+      } else {
+        extractedPdfBytes = bytes;
+      }
+
+      if (extractedPdfBytes.isNotEmpty) {
+        pdfInfo = _analyzePdf(extractedPdfBytes, pdfOffset);
+        pdfVersion = pdfInfo.version;
+        pdfPageCount = pdfInfo.pageCount;
       }
     }
 

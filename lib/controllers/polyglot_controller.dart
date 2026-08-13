@@ -246,9 +246,9 @@ class PolyglotController extends GetxController {
       polyglotResult.value = result;
 
       // Auto-inspect the newly generated result
-      inspectionResult.value = PolyglotInspector.inspect(
-        bytes: result.data,
-        fileName: combinedFileName,
+      inspectionResult.value = await compute(
+        _runInspectInIsolate,
+        _InspectParams(result.data, combinedFileName),
       );
 
       Notify.success(
@@ -316,7 +316,10 @@ class PolyglotController extends GetxController {
       isInspecting.value = true;
       final bytes = await file.readAsBytes();
       final name = file.name;
-      inspectionResult.value = PolyglotInspector.inspect(bytes: bytes, fileName: name);
+      inspectionResult.value = await compute(
+        _runInspectInIsolate,
+        _InspectParams(bytes, name),
+      );
     } catch (e) {
       Notify.error(
         'Inspection Failed',
@@ -541,4 +544,14 @@ class PolyglotController extends GetxController {
     progress.value = 0.0;
     statusMessage.value = '';
   }
+}
+
+class _InspectParams {
+  final Uint8List bytes;
+  final String fileName;
+  const _InspectParams(this.bytes, this.fileName);
+}
+
+PolyglotInspectionResult _runInspectInIsolate(_InspectParams params) {
+  return PolyglotInspector.inspect(bytes: params.bytes, fileName: params.fileName);
 }

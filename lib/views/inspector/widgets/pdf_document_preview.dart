@@ -36,16 +36,28 @@ class PdfDocumentPreview extends StatefulWidget {
 
 class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
   PdfViewTab _selectedTab = PdfViewTab.pages;
-  PdfControllerPinch? _pdfPinchController;
+  PdfController? _pdfController;
+  final TransformationController _transformationController = TransformationController();
   int _currentPage = 1;
   int _totalPages = 1;
   bool _isLoadingPdf = true;
   String? _pdfError;
+  double _currentScale = 1.0;
 
   @override
   void initState() {
     super.initState();
+    _transformationController.addListener(_onTransformationChanged);
     _initPdfController();
+  }
+
+  void _onTransformationChanged() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    if ((scale - _currentScale).abs() > 0.02) {
+      setState(() {
+        _currentScale = scale;
+      });
+    }
   }
 
   @override
@@ -57,10 +69,13 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
   }
 
   Future<void> _initPdfController() async {
-    _pdfPinchController?.dispose();
+    _pdfController?.dispose();
+    _pdfController = null;
+    _transformationController.value = Matrix4.identity();
     setState(() {
       _isLoadingPdf = true;
       _pdfError = null;
+      _currentScale = 1.0;
     });
 
     try {
@@ -68,12 +83,51 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
         throw Exception('PDF byte stream is empty');
       }
 
-      final doc = await PdfDocument.openData(widget.pdfBytes);
-      _totalPages = doc.pagesCount;
+      Uint8List bytesToOpen = widget.pdfBytes;
+
+      // Ensure stream starts at %PDF- marker
+      int startIdx = -1;
+      for (int i = 0; i <= bytesToOpen.length - 5; i++) {
+        if (bytesToOpen[i] == 0x25 &&
+            bytesToOpen[i + 1] == 0x50 &&
+            bytesToOpen[i + 2] == 0x44 &&
+            bytesToOpen[i + 3] == 0x46 &&
+            bytesToOpen[i + 4] == 0x2D) {
+          startIdx = i;
+          break;
+        }
+      }
+
+      if (startIdx > 0) {
+        // Find %%EOF marker
+        int endIdx = -1;
+        for (int i = bytesToOpen.length - 5; i >= startIdx; i--) {
+          if (bytesToOpen[i] == 0x25 &&
+              bytesToOpen[i + 1] == 0x25 &&
+              bytesToOpen[i + 2] == 0x45 &&
+              bytesToOpen[i + 3] == 0x4F &&
+              bytesToOpen[i + 4] == 0x46) {
+            endIdx = i + 5;
+            while (endIdx < bytesToOpen.length &&
+                (bytesToOpen[endIdx] == 0x0D || bytesToOpen[endIdx] == 0x0A || bytesToOpen[endIdx] == 0x20)) {
+              endIdx++;
+            }
+            break;
+          }
+        }
+        if (endIdx != -1) {
+          bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx, endIdx));
+        } else {
+          bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx));
+        }
+      }
+
+      final doc = await PdfDocument.openData(bytesToOpen);
+      _totalPages = doc.pagesCount > 0 ? doc.pagesCount : 1;
       _currentPage = 1;
 
-      _pdfPinchController = PdfControllerPinch(
-        document: PdfDocument.openData(widget.pdfBytes),
+      _pdfController = PdfController(
+        document: PdfDocument.openData(bytesToOpen),
         initialPage: 1,
       );
 
@@ -92,9 +146,44 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     }
   }
 
+  void _toggleDoubleTapZoom(TapDownDetails details) {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    if (scale > 1.25) {
+      _transformationController.value = Matrix4.identity();
+    } else {
+      final position = details.localPosition;
+      final matrix = Matrix4.identity()
+        ..setEntry(0, 0, 2.0)
+        ..setEntry(1, 1, 2.0)
+        ..setEntry(0, 3, -position.dx)
+        ..setEntry(1, 3, -position.dy);
+      _transformationController.value = matrix;
+    }
+    setState(() {});
+  }
+
+  void _zoomIn() {
+    final newScale = (_currentScale + 0.3).clamp(0.8, 4.0);
+    _transformationController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+    setState(() {});
+  }
+
+  void _zoomOut() {
+    final newScale = (_currentScale - 0.3).clamp(0.8, 4.0);
+    _transformationController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+    setState(() {});
+  }
+
+  void _resetZoom() {
+    _transformationController.value = Matrix4.identity();
+    setState(() {});
+  }
+
   @override
   void dispose() {
-    _pdfPinchController?.dispose();
+    _transformationController.removeListener(_onTransformationChanged);
+    _transformationController.dispose();
+    _pdfController?.dispose();
     super.dispose();
   }
 
@@ -185,7 +274,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  const Icon(Icons.picture_as_pdf_rounded, size: 16, color: Color(0xFFEF4444)),
+                  const Icon(Icons.picture_as_pdf_outlined, size: 16, color: AppTheme.accent),
                   Text(
                     info.title != null && info.title!.isNotEmpty ? info.title! : 'PDF Document Stream',
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
@@ -203,7 +292,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                         fontSize: 9.5,
                         fontFamily: 'monospace',
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFEF4444),
+                        color: AppTheme.accent,
                       ),
                     ),
                   ),
@@ -224,18 +313,21 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFEF4444).withAlpha(25),
-                      foregroundColor: const Color(0xFFEF4444),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                      side: BorderSide(color: const Color(0xFFEF4444).withAlpha(80)),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: AppTheme.surfaceElevated,
+                      foregroundColor: AppTheme.textPrimary,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      side: const BorderSide(color: AppTheme.borderSubtle),
                       visualDensity: VisualDensity.compact,
                     ),
                     onPressed: _openInSystemViewer,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 13),
-                    label: const Text('Open in Viewer', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppTheme.textSecondary),
+                    label: const Text(
+                      'Open in Viewer',
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                    ),
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
@@ -309,9 +401,9 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withAlpha(25),
+        color: color.withAlpha(20),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(80)),
+        border: Border.all(color: color.withAlpha(60)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -350,7 +442,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
             Icon(
               icon,
               size: 12,
-              color: isSelected ? const Color(0xFFEF4444) : AppTheme.textMuted,
+              color: isSelected ? AppTheme.textPrimary : AppTheme.textMuted,
             ),
             const SizedBox(width: 4),
             Flexible(
@@ -381,11 +473,11 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     }
   }
 
-  /// Tab 1: In-App Interactive PDF Page Viewer with Navigation Controls
+  /// Tab 1: In-App Interactive Cross-Platform PDF Page Viewer with Zoom & Pan
   Widget _buildPagesTab() {
     if (_isLoadingPdf) {
       return Container(
-        height: 400,
+        height: 420,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: const Color(0xFF090B0E),
@@ -398,7 +490,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
             SizedBox(
               width: 24,
               height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
             ),
             SizedBox(height: 12),
             Text('Decoding PDF page rasterizer...', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
@@ -407,7 +499,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
       );
     }
 
-    if (_pdfError != null || _pdfPinchController == null) {
+    if (_pdfError != null || _pdfController == null) {
       return Container(
         height: 380,
         alignment: Alignment.center,
@@ -420,34 +512,68 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 32, color: AppTheme.danger),
-            const SizedBox(height: 10),
-            const Text(
-              'PDF Render Preview Notice',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Use "Open in Viewer" to view encapsulated PDF streams with external viewers, or verify container headers.',
-              style: TextStyle(fontSize: 10.5, color: AppTheme.textSecondary.withAlpha(200)),
-              textAlign: TextAlign.center,
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceElevated,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.borderSubtle),
+              ),
+              child: const Icon(Icons.picture_as_pdf_outlined, size: 28, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+            const Text(
+              'PDF Stream Notice',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+            ),
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Text(
+                _pdfError ?? 'Could not initialize in-app PDF rasterizer for this stream.',
+                style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppTheme.textMuted),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
-              onPressed: _openInSystemViewer,
-              icon: const Icon(Icons.open_in_browser_rounded, size: 14),
-              label: const Text('Open in System Reader', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: AppTheme.surfaceElevated,
+                    foregroundColor: AppTheme.textPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    side: const BorderSide(color: AppTheme.borderSubtle),
+                  ),
+                  onPressed: _initPdfController,
+                  icon: const Icon(Icons.refresh_rounded, size: 14),
+                  label: const Text('Retry In-App Preview', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: const Color(0xFF0D0F12),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                  onPressed: _openInSystemViewer,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                  label: const Text('Open in System Viewer', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ],
             ),
           ],
         ),
       );
     }
+
+    final isZoomed = (_currentScale - 1.0).abs() > 0.05;
 
     return Container(
       decoration: BoxDecoration(
@@ -458,12 +584,12 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
       padding: const EdgeInsets.all(10),
       child: Column(
         children: [
-          // Page Navigation Toolbar
+          // 1. Page Navigation & Interactive Zoom Toolbar
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            runSpacing: 6,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               // Page Navigation Controls
               Container(
@@ -481,7 +607,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                       tooltip: 'Previous Page',
                       onPressed: _currentPage > 1
                           ? () {
-                              _pdfPinchController?.previousPage(
+                              _pdfController?.previousPage(
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeInOut,
                               );
@@ -501,7 +627,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                       tooltip: 'Next Page',
                       onPressed: _currentPage < _totalPages
                           ? () {
-                              _pdfPinchController?.nextPage(
+                              _pdfController?.nextPage(
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeInOut,
                               );
@@ -512,23 +638,52 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                 ),
               ),
 
-              // Interactive Status Badge
+              // Zoom Controls Toolbar
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withAlpha(20),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFFEF4444).withAlpha(60)),
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: AppTheme.borderSubtle),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.touch_app_rounded, size: 12, color: Color(0xFFEF4444)),
-                    SizedBox(width: 4),
-                    Text(
-                      'Pinch & Scroll Zoom Active',
-                      style: TextStyle(fontSize: 9.5, color: Color(0xFFEF4444), fontWeight: FontWeight.bold),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.remove_rounded, size: 14, color: AppTheme.textSecondary),
+                      tooltip: 'Zoom Out',
+                      onPressed: _currentScale > 0.85 ? _zoomOut : null,
                     ),
+                    InkWell(
+                      onTap: isZoomed ? _resetZoom : null,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                        child: Text(
+                          '${(_currentScale * 100).round()}%',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                            color: isZoomed ? AppTheme.accent : AppTheme.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.add_rounded, size: 14, color: AppTheme.textSecondary),
+                      tooltip: 'Zoom In',
+                      onPressed: _currentScale < 3.95 ? _zoomIn : null,
+                    ),
+                    if (isZoomed) ...[
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.restart_alt_rounded, size: 13, color: AppTheme.accent),
+                        tooltip: 'Reset Zoom (100%)',
+                        onPressed: _resetZoom,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -537,9 +692,36 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
           const SizedBox(height: 8),
 
-          // In-App PDF Viewport
+          // 2. Gesture Helper Pill Banner
           Container(
-            height: 400,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceElevated.withAlpha(140),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: AppTheme.borderSubtle),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app_outlined, size: 13, color: AppTheme.accent),
+                SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Double-click to zoom in/out • Right-click or drag to pan around',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textSecondary, letterSpacing: -0.1),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // 3. In-App Interactive Pan & Zoom PDF Viewport
+          Container(
+            height: 420,
             width: double.infinity,
             decoration: BoxDecoration(
               color: const Color(0xFF1E222A),
@@ -547,25 +729,37 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
               border: Border.all(color: AppTheme.borderSubtle.withAlpha(50)),
             ),
             clipBehavior: Clip.antiAlias,
-            child: PdfViewPinch(
-              controller: _pdfPinchController!,
-              onPageChanged: (page) {
-                setState(() {
-                  _currentPage = page;
-                });
-              },
-              builders: PdfViewPinchBuilders<DefaultBuilderOptions>(
-                options: const DefaultBuilderOptions(
-                  loaderSwitchDuration: Duration(milliseconds: 150),
-                ),
-                documentLoaderBuilder: (_) => const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
-                ),
-                pageLoaderBuilder: (_) => const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
-                ),
-                errorBuilder: (_, error) => Center(
-                  child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+            child: GestureDetector(
+              onDoubleTapDown: _toggleDoubleTapZoom,
+              child: InteractiveViewer(
+                transformationController: _transformationController,
+                panEnabled: true,
+                scaleEnabled: true,
+                minScale: 0.8,
+                maxScale: 4.0,
+                boundaryMargin: const EdgeInsets.all(80),
+                clipBehavior: Clip.antiAlias,
+                child: PdfView(
+                  controller: _pdfController!,
+                  onPageChanged: (page) {
+                    setState(() {
+                      _currentPage = page;
+                    });
+                  },
+                  builders: PdfViewBuilders<DefaultBuilderOptions>(
+                    options: const DefaultBuilderOptions(
+                      loaderSwitchDuration: Duration(milliseconds: 150),
+                    ),
+                    documentLoaderBuilder: (_) => const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                    ),
+                    pageLoaderBuilder: (_) => const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                    ),
+                    errorBuilder: (_, error) => Center(
+                      child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -601,7 +795,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
             runSpacing: 8,
             children: [
               _buildStatCard('Page Count', '$pageCount', Icons.auto_stories_rounded, const Color(0xFF38BDF8)),
-              _buildStatCard('PDF Version', 'v${info.version ?? '1.4'}', Icons.picture_as_pdf_rounded, const Color(0xFFEF4444)),
+              _buildStatCard('PDF Version', 'v${info.version ?? '1.4'}', Icons.picture_as_pdf_outlined, AppTheme.accent),
               _buildStatCard('Indirect Objs', '${info.objectCount}', Icons.account_tree_outlined, const Color(0xFFFBBF24)),
               _buildStatCard('Embedded Fonts', '${info.fontCount}', Icons.font_download_outlined, const Color(0xFFA78BFA)),
               _buildStatCard('Image Streams', '${info.imageCount}', Icons.image_outlined, AppTheme.primary),

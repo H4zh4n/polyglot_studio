@@ -35,6 +35,7 @@ class PolyglotInspectorView extends StatefulWidget {
 class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
   int _selectedTabIndex = 0;
   bool _showHexDump = false;
+  bool _isDragging = false;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +48,7 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
 
         return Obx(() {
           final res = controller.inspectionResult.value;
+          final isInspecting = controller.isInspecting.value;
 
           return SingleChildScrollView(
             padding: padding,
@@ -61,8 +63,10 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
 
                     const SizedBox(height: 14),
 
-                    // Empty Drag-and-Drop or Unified Multi-Format Viewer
-                    if (res == null)
+                    // Loading State / Empty Drag-and-Drop or Unified Multi-Format Viewer
+                    if (isInspecting)
+                      _buildLoadingIndicator()
+                    else if (res == null)
                       _buildDropZone(controller)
                     else ...[
                       // File Metadata & Format Badges Bar
@@ -234,9 +238,56 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
     );
   }
 
+  Widget _buildLoadingIndicator() {
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 220),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderSubtle),
+      ),
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.textPrimary),
+            ),
+          ),
+          SizedBox(height: 18),
+          Text(
+            'Analyzing File Architecture...',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: AppTheme.trackingTight,
+              color: AppTheme.textPrimary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Scanning byte signatures, parsing media atoms, and decoding embedded payloads...',
+            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDropZone(PolyglotController controller) {
     return DropTarget(
+      onDragEntered: (_) => setState(() => _isDragging = true),
+      onDragExited: (_) => setState(() => _isDragging = false),
       onDragDone: (detail) {
+        setState(() => _isDragging = false);
         if (detail.files.isNotEmpty) {
           controller.inspectFile(AppFile.fromXFile(detail.files.first));
         }
@@ -244,14 +295,18 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
       child: InkWell(
         onTap: () => controller.pickAndInspectFile(),
         borderRadius: BorderRadius.circular(12),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 200),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: _isDragging ? AppTheme.surfaceElevated : AppTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.borderSubtle),
+            border: Border.all(
+              color: _isDragging ? AppTheme.accent : AppTheme.borderSubtle,
+              width: _isDragging ? 1.5 : 1.0,
+            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -260,16 +315,22 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceElevated,
+                  color: _isDragging ? AppTheme.surfaceHighlight : AppTheme.surfaceElevated,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.borderSubtle),
+                  border: Border.all(color: _isDragging ? AppTheme.accent.withAlpha(80) : AppTheme.borderSubtle),
                 ),
-                child: const Icon(Icons.remove_red_eye_outlined, size: 28, color: AppTheme.textPrimary),
+                child: Icon(
+                  _isDragging ? Icons.file_download_outlined : Icons.remove_red_eye_outlined,
+                  size: 28,
+                  color: _isDragging ? AppTheme.accent : AppTheme.textPrimary,
+                ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Drop any polyglot or media file here to view & inspect',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              Text(
+                _isDragging
+                    ? 'Release to inspect file architecture'
+                    : 'Drop any polyglot or media file here to view & inspect',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
