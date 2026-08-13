@@ -8,6 +8,7 @@ import 'package:polyglot_core/polyglot_core.dart';
 import '../models/app_file.dart';
 import '../utils/notify.dart';
 import '../utils/number_utils.dart';
+import '../views/dialogs/polyglot_detected_dialog.dart';
 
 /// GetX Controller for managing in-memory polyglot generation and inspection across Web and native platforms.
 class PolyglotController extends GetxController {
@@ -143,8 +144,44 @@ class PolyglotController extends GetxController {
     }
   }
 
-  // Handle Drag-and-Drop
-  void handleDroppedFiles(List<AppFile> files) {
+  // Handle Drag-and-Drop in Studio
+  Future<void> handleDroppedFiles(List<AppFile> files) async {
+    if (files.isEmpty) return;
+
+    // Check if the primary dropped file is a polyglot binary
+    final firstFile = files.first;
+    try {
+      final bytes = await firstFile.readAsBytes();
+      if (bytes.isNotEmpty) {
+        final inspection = await compute(_runInspectInIsolate, _InspectParams(bytes, firstFile.name));
+        final isPolyglot = inspection.detectedFormats.length >= 2 ||
+            (inspection.hasIcoHeader && inspection.hasSecondaryFtyp) ||
+            (inspection.hasZipEocd && (inspection.hasIcoHeader || inspection.pngOffset != null || inspection.detectedFormats.length > 1));
+
+        if (isPolyglot) {
+          final context = Get.context;
+          if (context != null && context.mounted) {
+            final shouldInspect = await PolyglotDetectedDialog.show(
+              context,
+              fileName: firstFile.name,
+              inspection: inspection,
+            );
+
+            if (shouldInspect == true) {
+              inspectionResult.value = inspection;
+              selectedViewMode.value = 1; // Navigate to Inspector
+              return;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Otherwise assign files to Studio asset inputs
+    assignFilesToStudio(files);
+  }
+
+  void assignFilesToStudio(List<AppFile> files) {
     for (final file in files) {
       final ext = file.extension;
       if (['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.ico'].contains(ext)) {

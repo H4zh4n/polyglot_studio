@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:polyglot/controllers/polyglot_controller.dart';
 import 'package:polyglot/main.dart';
 import 'package:polyglot/models/app_file.dart';
+import 'package:polyglot/views/dialogs/polyglot_detected_dialog.dart';
 import 'package:polyglot/views/inspector/widgets/audio_player_preview.dart';
 import 'package:polyglot/views/inspector/widgets/html_document_preview.dart';
 import 'package:polyglot/views/inspector/widgets/pdf_document_preview.dart';
@@ -195,7 +196,7 @@ void main() {
   test('AppFile drag and drop routes files to correct categories', () {
     final controller = PolyglotController();
 
-    controller.handleDroppedFiles([
+    controller.assignFilesToStudio([
       const AppFile(name: 'test_image.png'),
       const AppFile(name: 'test_video.mp4'),
       const AppFile(name: 'document.pdf'),
@@ -213,6 +214,44 @@ void main() {
     expect(controller.zipFiles.first.name, 'archive.zip');
     expect(controller.appendableFiles.length, 1);
     expect(controller.appendableFiles.first.name, 'payload.bin');
+  });
+
+  testWidgets('PolyglotDetectedDialog displays detected formats and navigation actions',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final mockInspection = PolyglotInspectionResult(
+      fileName: 'secret_bundle.ico.mp4',
+      fileSize: 40960,
+      headerBytes: Uint8List(288),
+      extraHeaderString: '',
+      hasIcoHeader: true,
+      hasSecondaryFtyp: true,
+      hasHtmlWrapper: false,
+      hasPdfStream: false,
+      hasZipEocd: false,
+      detectedFormats: ['.ico', '.png', '.mp4'],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PolyglotDetectedDialog(
+            fileName: 'secret_bundle.ico.mp4',
+            fileSize: 40960,
+            inspection: mockInspection,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Polyglot Binary Detected'), findsOneWidget);
+    expect(find.text('Detected Format Layers'), findsOneWidget);
+    expect(find.text('Use in Studio'), findsOneWidget);
+    expect(find.text('Inspect Polyglot'), findsOneWidget);
   });
 
   test('AppScrollBehavior enables mouse click-to-drag scrolling globally', () {
