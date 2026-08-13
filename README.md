@@ -49,13 +49,13 @@ dynamically changes its behavior to match the native application opening it:
 
 |                             Polyglot Studio Workbench                              |                             Binary & Payload Inspector                             |
 |:----------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------:|
-| <img src="https://i.imgur.com/UizrYwZ.png" width="100%" alt="Desktop Workbench" /> | <img src="https://i.imgur.com/EU3bLLL.png" width="100%" alt="Desktop Inspector" /> |
+| <img src="https://i.imgur.com/3j7AVJV.png" width="100%" alt="Desktop Workbench" /> | <img src="https://i.imgur.com/kEo2FX3.png" width="100%" alt="Desktop Inspector" /> |
 
 ### 📱 Mobile View
 
 |                              Mobile Studio Workbench                              |                              Mobile Binary Inspector                              |
 |:---------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------:|
-| <img src="https://i.imgur.com/ykmYP7P.png" height="420" alt="Mobile Workbench" /> | <img src="https://i.imgur.com/zyILjy4.png" height="420" alt="Mobile Inspector" /> |
+| <img src="https://i.imgur.com/uAHSfg1.png" height="420" alt="Mobile Workbench" /> | <img src="https://i.imgur.com/4VHaf2m.png" height="420" alt="Mobile Inspector" /> |
 
 ---
 
