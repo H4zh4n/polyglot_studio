@@ -197,12 +197,14 @@ class HtmlDocumentPreview extends StatefulWidget {
   final String htmlContent;
   final String fileName;
   final HtmlMetadataInfo htmlInfo;
+  final VoidCallback? onExport;
 
   const HtmlDocumentPreview({
     super.key,
     required this.htmlContent,
     required this.fileName,
     this.htmlInfo = const HtmlMetadataInfo(),
+    this.onExport,
   });
 
   @override
@@ -394,12 +396,18 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
                     tooltip: 'Copy Source Code',
                     onPressed: _copyToClipboard,
                   ),
-                  if (controller != null) ...[
+                  if (widget.onExport != null || controller != null) ...[
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.download_outlined, size: 14, color: AppTheme.textSecondary),
                       tooltip: 'Export Clean HTML Document',
-                      onPressed: () => controller.extractHtmlFile(),
+                      onPressed: () {
+                        if (widget.onExport != null) {
+                          widget.onExport!();
+                        } else {
+                          controller?.extractHtmlFile();
+                        }
+                      },
                     ),
                   ],
                 ],

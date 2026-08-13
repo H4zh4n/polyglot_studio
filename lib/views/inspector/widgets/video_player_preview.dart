@@ -16,6 +16,7 @@ class VideoPlayerPreview extends StatefulWidget {
   final String format;
   final MediaMetadataInfo mediaInfo;
   final List<int> headerBytes;
+  final VoidCallback? onExport;
 
   const VideoPlayerPreview({
     super.key,
@@ -24,6 +25,7 @@ class VideoPlayerPreview extends StatefulWidget {
     this.format = '.mp4',
     this.mediaInfo = const MediaMetadataInfo(),
     this.headerBytes = const [],
+    this.onExport,
   });
 
   @override
@@ -212,7 +214,7 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
               ),
 
               // Export Video Button
-              if (controller != null) ...[
+              if (widget.onExport != null || controller != null) ...[
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.surfaceElevated,
@@ -222,7 +224,13 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
                     side: const BorderSide(color: AppTheme.borderSubtle),
                     visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: () => controller.extractMediaFile(preferredExtension: widget.format.replaceAll('.', '')),
+                  onPressed: () {
+                    if (widget.onExport != null) {
+                      widget.onExport!();
+                    } else {
+                      controller?.extractMediaFile(preferredExtension: widget.format.replaceAll('.', ''));
+                    }
+                  },
                   icon: const Icon(Icons.download_outlined, size: 13),
                   label: const Text('Export Video', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
                 ),

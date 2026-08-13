@@ -6,6 +6,7 @@ import '../controllers/polyglot_controller.dart';
 import '../models/app_file.dart';
 import '../theme/app_theme.dart';
 import 'desktop/desktop_home_view.dart';
+import 'dialogs/about_app_dialog.dart';
 import 'inspector/polyglot_inspector_view.dart';
 import 'mobile/mobile_home_view.dart';
 
@@ -27,6 +28,7 @@ class _HomeViewState extends State<HomeView> {
     return Obx(() {
       final mode = controller.selectedViewMode.value;
       final isAnalyzing = controller.isAnalyzingDroppedFile.value;
+      final version = controller.appVersion.value;
 
       return Scaffold(
         appBar: AppBar(
@@ -42,10 +44,48 @@ class _HomeViewState extends State<HomeView> {
               ),
             ),
           ),
-          title: const Text(
-            'Polyglot',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: AppTheme.trackingTight),
-            overflow: TextOverflow.ellipsis,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Polyglot Studio',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: AppTheme.trackingTight),
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (version.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'App Info & Build Details',
+                  child: InkWell(
+                    onTap: () => AboutAppDialog.show(
+                      context,
+                      version: controller.appVersion.value,
+                      buildNumber: controller.appBuildNumber.value,
+                      appName: controller.appName.value,
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceElevated,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppTheme.borderSubtle),
+                      ),
+                      child: Text(
+                        'v$version',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textMuted,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           actions: [
             // Mode Switcher Pills (Studio / Inspector)

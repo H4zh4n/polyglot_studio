@@ -23,12 +23,14 @@ class PdfDocumentPreview extends StatefulWidget {
   final Uint8List pdfBytes;
   final String fileName;
   final PdfMetadataInfo pdfInfo;
+  final VoidCallback? onExport;
 
   const PdfDocumentPreview({
     super.key,
     required this.pdfBytes,
     required this.fileName,
     this.pdfInfo = const PdfMetadataInfo(),
+    this.onExport,
   });
 
   @override
@@ -410,12 +412,18 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                     tooltip: 'Copy PDF Metadata',
                     onPressed: _copyMetadataToClipboard,
                   ),
-                  if (controller != null) ...[
+                  if (widget.onExport != null || controller != null) ...[
                     IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.download_outlined, size: 14, color: AppTheme.textSecondary),
                       tooltip: 'Export PDF Document',
-                      onPressed: () => controller.extractPdfFile(),
+                      onPressed: () {
+                        if (widget.onExport != null) {
+                          widget.onExport!();
+                        } else {
+                          controller?.extractPdfFile();
+                        }
+                      },
                     ),
                   ],
                 ],

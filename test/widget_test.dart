@@ -12,6 +12,7 @@ import 'package:polyglot/views/dialogs/polyglot_detected_dialog.dart';
 import 'package:polyglot/views/inspector/widgets/audio_player_preview.dart';
 import 'package:polyglot/views/inspector/widgets/html_document_preview.dart';
 import 'package:polyglot/views/inspector/widgets/pdf_document_preview.dart';
+import 'package:polyglot/views/inspector/widgets/universal_file_preview.dart';
 import 'package:polyglot/views/inspector/widgets/zip_archive_preview.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 
@@ -36,8 +37,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(const PolyglotApp());
-    expect(find.text('Polyglot'), findsOneWidget);
-    expect(find.text('Studio'), findsOneWidget);
+    expect(find.text('Polyglot Studio'), findsWidgets);
     expect(find.text('Primary Image'), findsOneWidget);
     expect(find.text('Video / Audio'), findsOneWidget);
     expect(find.text('2. Optional Payloads'), findsOneWidget);
@@ -644,5 +644,52 @@ void main() {
 
     expect(find.byType(ZipArchivePreview), findsOneWidget);
     expect(find.text('index.html'), findsWidgets);
+  });
+
+  testWidgets('UniversalFilePreview renders modularly for standalone text and HTML payloads', (WidgetTester tester) async {
+    final textBytes = Uint8List.fromList('Hello Modular Polyglot'.codeUnits);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: UniversalFilePreview(
+            bytes: textBytes,
+            fileName: 'notes.txt',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hello Modular Polyglot'), findsOneWidget);
+    expect(find.byType(UniversalFilePreview), findsOneWidget);
+  });
+
+  testWidgets('UniversalFilePreview.show dialog opens responsive modal preview', (WidgetTester tester) async {
+    final textBytes = Uint8List.fromList('Modal Content Inside Preview'.codeUnits);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => UniversalFilePreview.show(
+                context,
+                bytes: textBytes,
+                fileName: 'preview.txt',
+              ),
+              child: const Text('Launch Preview'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Launch Preview'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('preview.txt'), findsOneWidget);
+    expect(find.text('Modal Content Inside Preview'), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
   });
 }
