@@ -17,6 +17,7 @@ class VideoPlayerPreview extends StatefulWidget {
   final MediaMetadataInfo mediaInfo;
   final List<int> headerBytes;
   final VoidCallback? onExport;
+  final bool isEmbedded;
 
   const VideoPlayerPreview({
     super.key,
@@ -26,6 +27,7 @@ class VideoPlayerPreview extends StatefulWidget {
     this.mediaInfo = const MediaMetadataInfo(),
     this.headerBytes = const [],
     this.onExport,
+    this.isEmbedded = false,
   });
 
   @override
@@ -170,14 +172,16 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
   Widget build(BuildContext context) {
     final controller = Get.isRegistered<PolyglotController>() ? Get.find<PolyglotController>() : null;
     final info = widget.mediaInfo;
+    final size = MediaQuery.sizeOf(context);
+    final isMobile = size.width < 650;
 
-    return Container(
+    final content = Container(
       decoration: BoxDecoration(
-        color: AppTheme.background,
+        color: widget.isEmbedded ? Colors.transparent : AppTheme.background,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderSubtle),
+        border: widget.isEmbedded ? null : Border.all(color: AppTheme.borderSubtle),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(widget.isEmbedded ? 4 : (isMobile ? 8 : 14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -215,25 +219,39 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
 
               // Export Video Button
               if (widget.onExport != null || controller != null) ...[
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.surfaceElevated,
-                    foregroundColor: AppTheme.textPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                    side: const BorderSide(color: AppTheme.borderSubtle),
+                if (isMobile || widget.isEmbedded)
+                  IconButton(
                     visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.download_outlined, size: 15, color: AppTheme.textSecondary),
+                    tooltip: 'Export Video',
+                    onPressed: () {
+                      if (widget.onExport != null) {
+                        widget.onExport!();
+                      } else {
+                        controller?.extractMediaFile(preferredExtension: widget.format.replaceAll('.', ''));
+                      }
+                    },
+                  )
+                else
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.surfaceElevated,
+                      foregroundColor: AppTheme.textPrimary,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                      side: const BorderSide(color: AppTheme.borderSubtle),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () {
+                      if (widget.onExport != null) {
+                        widget.onExport!();
+                      } else {
+                        controller?.extractMediaFile(preferredExtension: widget.format.replaceAll('.', ''));
+                      }
+                    },
+                    icon: const Icon(Icons.download_outlined, size: 13),
+                    label: const Text('Export Video', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
                   ),
-                  onPressed: () {
-                    if (widget.onExport != null) {
-                      widget.onExport!();
-                    } else {
-                      controller?.extractMediaFile(preferredExtension: widget.format.replaceAll('.', ''));
-                    }
-                  },
-                  icon: const Icon(Icons.download_outlined, size: 13),
-                  label: const Text('Export Video', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-                ),
               ],
             ],
           ),
@@ -241,21 +259,27 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
           const SizedBox(height: 12),
 
           // 2. Video Player Viewport with Overlay Controls
-          Center(
-            child: MouseRegion(
-              onEnter: (_) => setState(() => _isHovering = true),
-              onExit: (_) => setState(() => _isHovering = false),
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 280, maxWidth: 500),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0A0C10),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.borderSubtle),
+          Builder(
+            builder: (context) {
+              final isPortrait = _isInitialized && _controller != null && _controller!.value.aspectRatio > 0 && _controller!.value.aspectRatio < 1.0;
+
+              return Center(
+                child: MouseRegion(
+                  onEnter: (_) => setState(() => _isHovering = true),
+                  onExit: (_) => setState(() => _isHovering = false),
+                  child: Container(
+                    constraints: BoxConstraints(maxHeight: isPortrait ? 400 : 280, maxWidth: isPortrait ? 320 : 500),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A0C10),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderSubtle),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _buildVideoCanvas(),
+                  ),
                 ),
-                clipBehavior: Clip.antiAlias,
-                child: _buildVideoCanvas(),
-              ),
-            ),
+              );
+            },
           ),
 
           const SizedBox(height: 12),
@@ -304,6 +328,14 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
         ],
       ),
     );
+
+    if (widget.isEmbedded) {
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: content,
+      );
+    }
+    return content;
   }
 
   Widget _buildVideoCanvas() {
@@ -421,80 +453,95 @@ class _VideoPlayerPreviewState extends State<VideoPlayerPreview> {
                   ),
 
                   // Bottom Controls Row
-                  Row(
-                    children: [
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(
-                          val.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          size: 18,
-                          color: Colors.white,
-                        ),
-                        onPressed: _togglePlayPause,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_formatDuration(val.position)} / ${_formatDuration(val.duration)}',
-                        style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.white70),
-                      ),
-                      const Spacer(),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final availableWidth = constraints.maxWidth;
+                      final isCompact = availableWidth < 300;
+                      final isUltraCompact = availableWidth < 220;
 
-                      // Volume & Mute
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        tooltip: _isMuted ? 'Unmute' : 'Mute',
-                        icon: Icon(
-                          _isMuted || _volume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                          size: 15,
-                          color: Colors.white70,
-                        ),
-                        onPressed: _toggleMute,
-                      ),
-                      SizedBox(
-                        width: 50,
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 2,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 3.5),
-                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 7),
-                            activeTrackColor: Colors.white,
-                            inactiveTrackColor: const Color(0x44FFFFFF),
-                            thumbColor: Colors.white,
+                      return Row(
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: Icon(
+                              val.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                              size: 18,
+                              color: Colors.white,
+                            ),
+                            onPressed: _togglePlayPause,
                           ),
-                          child: Slider(
-                            value: _isMuted ? 0.0 : _volume,
-                            min: 0.0,
-                            max: 1.0,
-                            onChanged: _setVolume,
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              isUltraCompact
+                                  ? _formatDuration(val.position)
+                                  : '${_formatDuration(val.position)} / ${_formatDuration(val.duration)}',
+                              style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', color: Colors.white70),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
+                          const Spacer(),
 
-                      // Speed Selector
-                      PopupMenuButton<double>(
-                        tooltip: 'Playback Speed',
-                        initialValue: _playbackRate,
-                        onSelected: _setPlaybackRate,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0x33FFFFFF),
-                            borderRadius: BorderRadius.circular(4),
+                          // Volume & Mute
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: _isMuted ? 'Unmute' : 'Mute',
+                            icon: Icon(
+                              _isMuted || _volume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                              size: 15,
+                              color: Colors.white70,
+                            ),
+                            onPressed: _toggleMute,
                           ),
-                          child: Text(
-                            '${_playbackRate}x',
-                            style: const TextStyle(fontSize: 9.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white),
+                          if (!isCompact) ...[
+                            SizedBox(
+                              width: 44,
+                              child: SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 2,
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 3.5),
+                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 7),
+                                  activeTrackColor: Colors.white,
+                                  inactiveTrackColor: const Color(0x44FFFFFF),
+                                  thumbColor: Colors.white,
+                                ),
+                                child: Slider(
+                                  value: _isMuted ? 0.0 : _volume,
+                                  min: 0.0,
+                                  max: 1.0,
+                                  onChanged: _setVolume,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+
+                          // Speed Selector
+                          PopupMenuButton<double>(
+                            tooltip: 'Playback Speed',
+                            initialValue: _playbackRate,
+                            onSelected: _setPlaybackRate,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0x33FFFFFF),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${_playbackRate}x',
+                                style: const TextStyle(fontSize: 9.0, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                            ),
+                            itemBuilder: (context) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) {
+                              return PopupMenuItem<double>(
+                                value: rate,
+                                child: Text('${rate}x', style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                              );
+                            }).toList(),
                           ),
-                        ),
-                        itemBuilder: (context) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((rate) {
-                          return PopupMenuItem<double>(
-                            value: rate,
-                            child: Text('${rate}x', style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
-                          );
-                        }).toList(),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

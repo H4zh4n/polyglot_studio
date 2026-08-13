@@ -22,7 +22,7 @@ void main() {
   Get.put(PolyglotController());
   runApp(
     DevicePreview(
-      enabled: kDebugMode,
+      enabled: false, //kDebugMode,
       devices: AppDevicePreviewDevices.all,
       tools: [
         ...DevicePreview.defaultTools,

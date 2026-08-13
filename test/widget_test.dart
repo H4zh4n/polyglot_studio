@@ -13,6 +13,8 @@ import 'package:polyglot/views/inspector/widgets/audio_player_preview.dart';
 import 'package:polyglot/views/inspector/widgets/html_document_preview.dart';
 import 'package:polyglot/views/inspector/widgets/pdf_document_preview.dart';
 import 'package:polyglot/views/inspector/widgets/universal_file_preview.dart';
+import 'package:polyglot/theme/app_theme.dart';
+import 'package:polyglot/views/inspector/widgets/video_player_preview.dart';
 import 'package:polyglot/views/inspector/widgets/zip_archive_preview.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 
@@ -765,4 +767,195 @@ void main() {
     expect(controller.selectedViewMode.value, 0);
     expect(find.text('1. Required Base Media'), findsOneWidget);
   });
+
+  testWidgets('PDF preview supports fullscreen modal dialog expansion on mobile', (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 1; // Inspector tab
+
+    const samplePdfString =
+        '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page >>\nendobj\n%%EOF';
+    final samplePdfBytes = Uint8List.fromList(samplePdfString.codeUnits);
+
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'mobile_doc.pdf',
+      fileSize: samplePdfBytes.length,
+      headerBytes: samplePdfBytes,
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: false,
+      hasPdfStream: true,
+      hasZipEocd: false,
+      detectedFormats: ['.pdf'],
+      extractedPdfBytes: samplePdfBytes,
+      pdfVersion: '1.4',
+      pdfPageCount: 1,
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(PdfDocumentPreview), findsOneWidget);
+    expect(find.byIcon(Icons.fullscreen_rounded), findsWidgets);
+
+    // Tap fullscreen button to open PdfFullscreenPreviewDialog
+    await tester.tap(find.byTooltip('Fullscreen / Expand PDF'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(PdfFullscreenPreviewDialog), findsOneWidget);
+    expect(find.text('mobile_doc.pdf'), findsWidgets);
+
+    // Close fullscreen dialog
+    await tester.tap(find.byTooltip('Close Fullscreen'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(PdfFullscreenPreviewDialog), findsNothing);
+  });
+
+  testWidgets('PDF preview supports InteractiveViewer and double-tap zoom', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final controller = Get.put(PolyglotController());
+    controller.selectedViewMode.value = 1;
+
+    final samplePdfBytes = Uint8List.fromList(
+      '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n164\n%%EOF\n'.codeUnits,
+    );
+
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'interactive_doc.pdf',
+      fileSize: samplePdfBytes.length,
+      headerBytes: samplePdfBytes,
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: false,
+      hasPdfStream: true,
+      hasZipEocd: false,
+      detectedFormats: ['.pdf'],
+      extractedPdfBytes: samplePdfBytes,
+      pdfVersion: '1.4',
+      pdfPageCount: 1,
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(PdfDocumentPreview), findsOneWidget);
+    expect(find.text('PDF Document Stream'), findsWidgets);
+    expect(find.byTooltip('Fullscreen / Expand PDF'), findsWidgets);
+  });
+
+  testWidgets('VideoPlayerPreview renders cleanly on narrow mobile screen without overflow', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final sampleMp4Bytes = Uint8List.fromList([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D,
+      0x00, 0x00, 0x02, 0x00, 0x69, 0x73, 0x6F, 0x6D, 0x6D, 0x70, 0x34, 0x32,
+      0x00, 0x00, 0x00, 0x08, 0x66, 0x72, 0x65, 0x65,
+      0x00, 0x00, 0x00, 0x10, 0x6D, 0x64, 0x61, 0x74,
+      0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: VideoPlayerPreview(
+              videoBytes: sampleMp4Bytes,
+              fileName: 'portrait_sample.mp4',
+              format: '.mp4',
+              mediaInfo: const MediaMetadataInfo(
+                videoCodec: 'H.264 / AVC1',
+                audioCodec: 'AAC Stereo',
+                atomBoxes: ['ftyp', 'free', 'mdat'],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(VideoPlayerPreview), findsOneWidget);
+    expect(find.text('Interactive Video Player'), findsOneWidget);
+    expect(find.text('.MP4'), findsOneWidget);
+  });
+
+  testWidgets('ZipArchivePreview with PDF and MP4 entries renders cleanly on mobile screen', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(360, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final zipData = Uint8List(100);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ZipArchivePreview(
+              zipBytes: zipData,
+              fileName: 'archive.zip',
+              entries: const [
+                ZipEntryInfo(name: 'video_clip.mp4', size: 24, compressedSize: 24, compressionMethod: 'Deflate'),
+                ZipEntryInfo(name: 'document.pdf', size: 9, compressedSize: 9, compressionMethod: 'Deflate'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(ZipArchivePreview), findsOneWidget);
+    expect(find.text('video_clip.mp4'), findsWidgets);
+    expect(find.text('document.pdf'), findsWidgets);
+  });
+
+  testWidgets('UniversalFilePreview renders image immediately in port with interactive viewer and enlarge badge',
+      (WidgetTester tester) async {
+    final image = img.Image(width: 50, height: 50);
+    img.fill(image, color: img.ColorRgba8(255, 0, 0, 255));
+    final pngBytes = Uint8List.fromList(img.encodePng(image));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            height: 400,
+            child: UniversalFilePreview(
+              bytes: pngBytes,
+              fileName: 'photo.png',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(UniversalFilePreview), findsOneWidget);
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+    expect(find.text('Click to Enlarge'), findsOneWidget);
+  });
 }
+
+

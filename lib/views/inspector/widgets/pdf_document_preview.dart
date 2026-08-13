@@ -1,4 +1,5 @@
 import 'dart:io' show Directory, File, Platform, Process, ProcessStartMode;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show EagerGestureRecognizer, GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
@@ -24,6 +25,8 @@ class PdfDocumentPreview extends StatefulWidget {
   final String fileName;
   final PdfMetadataInfo pdfInfo;
   final VoidCallback? onExport;
+  final double? customViewportHeight;
+  final bool isEmbedded;
 
   const PdfDocumentPreview({
     super.key,
@@ -31,6 +34,8 @@ class PdfDocumentPreview extends StatefulWidget {
     required this.fileName,
     this.pdfInfo = const PdfMetadataInfo(),
     this.onExport,
+    this.customViewportHeight,
+    this.isEmbedded = false,
   });
 
   @override
@@ -46,8 +51,6 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
   bool _isLoadingPdf = true;
   String? _pdfError;
   double _currentScale = 1.0;
-  bool _isDragging = false;
-  Offset? _lastPanPos;
 
   @override
   void initState() {
@@ -168,7 +171,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
             if (scrollDelta == 0) return;
 
             final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
-            final newScale = (_currentScale * zoomFactor).clamp(0.8, 4.5);
+            final newScale = (_currentScale * zoomFactor).clamp(0.8, 5.0);
             if ((newScale - _currentScale).abs() < 0.001) return;
 
             final effectiveFactor = newScale / _currentScale;
@@ -201,11 +204,10 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
   void _toggleDoubleTapZoom(TapDownDetails details) {
     if (_currentScale > 1.25) {
-      _currentScale = 1.0;
-      _transformationController.value = Matrix4.identity();
+      _resetZoom();
     } else {
       final position = details.localPosition;
-      const double targetScale = 2.0;
+      const double targetScale = 2.2;
       final effectiveFactor = targetScale / _currentScale;
       final currentTrans = _transformationController.value.getTranslation();
       final double tx = position.dx - effectiveFactor * (position.dx - currentTrans.x);
@@ -219,34 +221,32 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
         ..setEntry(0, 3, tx)
         ..setEntry(1, 3, ty);
       _transformationController.value = matrix;
+      setState(() {});
+    }
+  }
+
+  void _zoomToScale(double targetScale) {
+    targetScale = targetScale.clamp(0.8, 5.0);
+    if ((targetScale - _currentScale).abs() < 0.001) return;
+    _currentScale = targetScale;
+    if (targetScale <= 1.02 && targetScale >= 0.98) {
+      _currentScale = 1.0;
+      _transformationController.value = Matrix4.identity();
+    } else {
+      _transformationController.value = Matrix4.identity()
+        ..setEntry(0, 0, targetScale)
+        ..setEntry(1, 1, targetScale)
+        ..setEntry(2, 2, 1.0);
     }
     setState(() {});
   }
 
   void _zoomIn() {
-    final newScale = (_currentScale + 0.3).clamp(0.8, 4.5);
-    _currentScale = newScale;
-    final currentMatrix = _transformationController.value;
-    final trans = currentMatrix.getTranslation();
-    _transformationController.value = Matrix4.identity()
-      ..setEntry(0, 0, newScale)
-      ..setEntry(1, 1, newScale)
-      ..setEntry(0, 3, trans.x)
-      ..setEntry(1, 3, trans.y);
-    setState(() {});
+    _zoomToScale(_currentScale * 1.25);
   }
 
   void _zoomOut() {
-    final newScale = (_currentScale - 0.3).clamp(0.8, 4.5);
-    _currentScale = newScale;
-    final currentMatrix = _transformationController.value;
-    final trans = currentMatrix.getTranslation();
-    _transformationController.value = Matrix4.identity()
-      ..setEntry(0, 0, newScale)
-      ..setEntry(1, 1, newScale)
-      ..setEntry(0, 3, trans.x)
-      ..setEntry(1, 3, trans.y);
-    setState(() {});
+    _zoomToScale(_currentScale * 0.8);
   }
 
   void _resetZoom() {
@@ -311,9 +311,6 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     if (info.creator != null) buffer.writeln('Creator: ${info.creator}');
     if (info.producer != null) buffer.writeln('Producer: ${info.producer}');
     if (info.creationDate != null) buffer.writeln('Creation Date: ${info.creationDate}');
-    buffer.writeln('Object Count: ${info.objectCount}');
-    buffer.writeln('Linearized: ${info.isLinearized}');
-    buffer.writeln('Encrypted: ${info.isEncrypted}');
     buffer.writeln('Size: ${NumberUtils.formatSizeKb(widget.pdfBytes.length)}');
 
     Clipboard.setData(ClipboardData(text: buffer.toString()));
@@ -323,19 +320,33 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     );
   }
 
+  void _openFullscreenViewer() {
+    PdfFullscreenPreviewDialog.show(
+      context,
+      pdfBytes: widget.pdfBytes,
+      fileName: widget.fileName,
+      pdfInfo: widget.pdfInfo,
+      initialPage: _currentPage,
+      onExport: widget.onExport,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = Get.isRegistered<PolyglotController>() ? Get.find<PolyglotController>() : null;
     final info = widget.pdfInfo;
     final pageCount = info.pageCount > 0 ? info.pageCount : _totalPages;
+    final size = MediaQuery.sizeOf(context);
+    final isMobile = size.width < 650 || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
+    final viewportHeight = widget.customViewportHeight ?? (isMobile ? (size.height * 0.65).clamp(420.0, 780.0) : 520.0);
 
-    return Container(
+    final content = Container(
       decoration: BoxDecoration(
-        color: AppTheme.background,
+        color: widget.isEmbedded ? Colors.transparent : AppTheme.background,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderSubtle),
+        border: widget.isEmbedded ? null : Border.all(color: AppTheme.borderSubtle),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(widget.isEmbedded ? 4 : (isMobile ? 8 : 14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -390,21 +401,35 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: AppTheme.surfaceElevated,
-                      foregroundColor: AppTheme.textPrimary,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                      side: const BorderSide(color: AppTheme.borderSubtle),
+                  if (isMobile || widget.isEmbedded)
+                    IconButton(
                       visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 15, color: AppTheme.textSecondary),
+                      tooltip: 'Open in Viewer',
+                      onPressed: _openInSystemViewer,
+                    )
+                  else
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: AppTheme.surfaceElevated,
+                        foregroundColor: AppTheme.textPrimary,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        side: const BorderSide(color: AppTheme.borderSubtle),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: _openInSystemViewer,
+                      icon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppTheme.textSecondary),
+                      label: const Text(
+                        'Open in Viewer',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      ),
                     ),
-                    onPressed: _openInSystemViewer,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 13, color: AppTheme.textSecondary),
-                    label: const Text(
-                      'Open in Viewer',
-                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                    ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.fullscreen_rounded, size: 16, color: AppTheme.textSecondary),
+                    tooltip: 'Fullscreen / Expand PDF',
+                    onPressed: _openFullscreenViewer,
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
@@ -453,7 +478,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
           const SizedBox(height: 12),
 
           // 3. Active Tab View
-          _buildActiveTabContent(),
+          _buildActiveTabContent(viewportHeight, isMobile),
 
           const SizedBox(height: 12),
 
@@ -478,6 +503,14 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
         ],
       ),
     );
+
+    if (widget.isEmbedded) {
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: content,
+      );
+    }
+    return content;
   }
 
   Widget _buildTechBadge(String text, Color color, IconData icon) {
@@ -545,10 +578,10 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     );
   }
 
-  Widget _buildActiveTabContent() {
+  Widget _buildActiveTabContent(double viewportHeight, bool isMobile) {
     switch (_selectedTab) {
       case PdfViewTab.pages:
-        return _buildPagesTab();
+        return _buildPagesTab(viewportHeight, isMobile);
       case PdfViewTab.overview:
         return _buildOverviewTab();
       case PdfViewTab.objects:
@@ -557,10 +590,10 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
   }
 
   /// Tab 1: In-App Interactive Cross-Platform PDF Page Viewer with Zoom & Pan
-  Widget _buildPagesTab() {
+  Widget _buildPagesTab(double viewportHeight, bool isMobile) {
     if (_isLoadingPdf) {
       return Container(
-        height: 420,
+        height: viewportHeight,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: const Color(0xFF090B0E),
@@ -584,7 +617,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
     if (_pdfError != null || _pdfController == null) {
       return Container(
-        height: 380,
+        height: math.min(viewportHeight, 400.0),
         alignment: Alignment.center,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -658,15 +691,13 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
     final isZoomed = (_currentScale - 1.0).abs() > 0.05;
 
-    final isMobile = MediaQuery.sizeOf(context).width < 650 || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
-
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF0C0E12),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.borderSubtle),
       ),
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(isMobile ? 6 : 10),
       child: Column(
         children: [
           // 1. Page Navigation & Interactive Zoom Toolbar
@@ -769,6 +800,12 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
                         onPressed: _resetZoom,
                       ),
                     ],
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.fullscreen_rounded, size: 14, color: AppTheme.textSecondary),
+                      tooltip: 'Expand Fullscreen',
+                      onPressed: _openFullscreenViewer,
+                    ),
                   ],
                 ),
               ),
@@ -805,9 +842,9 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
           const SizedBox(height: 8),
 
-          // 3. In-App Interactive Pan & Zoom PDF Viewport (Isolated from page scroll)
+          // 3. In-App Interactive Pan & Zoom PDF Viewport (supports pinch-to-zoom & double-tap zoom)
           Container(
-            height: 420,
+            height: viewportHeight,
             width: double.infinity,
             decoration: BoxDecoration(
               color: const Color(0xFF1E222A),
@@ -815,70 +852,37 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
               border: Border.all(color: AppTheme.borderSubtle.withAlpha(50)),
             ),
             clipBehavior: Clip.antiAlias,
-            child: RawGestureDetector(
-              gestures: <Type, GestureRecognizerFactory>{
-                EagerGestureRecognizer: GestureRecognizerFactoryWithHandlers<EagerGestureRecognizer>(
-                  () => EagerGestureRecognizer(),
-                  (EagerGestureRecognizer instance) {},
-                ),
-              },
-              child: Listener(
-                onPointerSignal: _onPointerSignal,
-                onPointerDown: (event) {
-                  _lastPanPos = event.position;
-                  setState(() => _isDragging = true);
-                },
-                onPointerMove: (event) {
-                  if (_lastPanPos != null) {
-                    final delta = event.position - _lastPanPos!;
-                    _lastPanPos = event.position;
-                    final currentMatrix = _transformationController.value;
-                    final trans = currentMatrix.getTranslation();
-                    final matrix = Matrix4.identity()
-                      ..setEntry(0, 0, _currentScale)
-                      ..setEntry(1, 1, _currentScale)
-                      ..setEntry(0, 3, trans.x + delta.dx)
-                      ..setEntry(1, 3, trans.y + delta.dy);
-                    _transformationController.value = matrix;
-                    setState(() {});
-                  }
-                },
-                onPointerUp: (_) {
-                  _lastPanPos = null;
-                  setState(() => _isDragging = false);
-                },
-                onPointerCancel: (_) {
-                  _lastPanPos = null;
-                  setState(() => _isDragging = false);
-                },
-                child: MouseRegion(
-                  cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
-                  child: GestureDetector(
-                    onDoubleTapDown: _toggleDoubleTapZoom,
-                    child: ClipRect(
-                      child: Transform(
-                        transform: _transformationController.value,
-                        child: PdfView(
-                          controller: _pdfController!,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _currentPage = page;
-                            });
-                          },
-                          builders: PdfViewBuilders<DefaultBuilderOptions>(
-                            options: const DefaultBuilderOptions(
-                              loaderSwitchDuration: Duration(milliseconds: 150),
-                            ),
-                            documentLoaderBuilder: (_) => const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
-                            ),
-                            pageLoaderBuilder: (_) => const Center(
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
-                            ),
-                            errorBuilder: (_, error) => Center(
-                              child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
-                            ),
-                          ),
+            child: Listener(
+              onPointerSignal: _onPointerSignal,
+              child: GestureDetector(
+                onDoubleTapDown: _toggleDoubleTapZoom,
+                onDoubleTap: () {},
+                child: ClipRect(
+                  child: InteractiveViewer(
+                    transformationController: _transformationController,
+                    minScale: 0.8,
+                    maxScale: 5.0,
+                    boundaryMargin: const EdgeInsets.all(120),
+                    clipBehavior: Clip.none,
+                    child: PdfView(
+                      controller: _pdfController!,
+                      onPageChanged: (page) {
+                        setState(() {
+                          _currentPage = page;
+                        });
+                      },
+                      builders: PdfViewBuilders<DefaultBuilderOptions>(
+                        options: const DefaultBuilderOptions(
+                          loaderSwitchDuration: Duration(milliseconds: 150),
+                        ),
+                        documentLoaderBuilder: (_) => const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                        ),
+                        pageLoaderBuilder: (_) => const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                        ),
+                        errorBuilder: (_, error) => Center(
+                          child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
                         ),
                       ),
                     ),
@@ -1103,6 +1107,593 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
             TextSpan(
               text: value,
               style: const TextStyle(fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Fullscreen interactive PDF Document Viewer modal dialog.
+class PdfFullscreenPreviewDialog extends StatefulWidget {
+  final Uint8List pdfBytes;
+  final String fileName;
+  final PdfMetadataInfo pdfInfo;
+  final int initialPage;
+  final VoidCallback? onExport;
+
+  const PdfFullscreenPreviewDialog({
+    super.key,
+    required this.pdfBytes,
+    required this.fileName,
+    this.pdfInfo = const PdfMetadataInfo(),
+    this.initialPage = 1,
+    this.onExport,
+  });
+
+  static Future<void> show(
+    BuildContext context, {
+    required Uint8List pdfBytes,
+    required String fileName,
+    PdfMetadataInfo pdfInfo = const PdfMetadataInfo(),
+    int initialPage = 1,
+    VoidCallback? onExport,
+  }) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: const Color(0xEE080A0E),
+      builder: (context) => PdfFullscreenPreviewDialog(
+        pdfBytes: pdfBytes,
+        fileName: fileName,
+        pdfInfo: pdfInfo,
+        initialPage: initialPage,
+        onExport: onExport,
+      ),
+    );
+  }
+
+  @override
+  State<PdfFullscreenPreviewDialog> createState() => _PdfFullscreenPreviewDialogState();
+}
+
+class _PdfFullscreenPreviewDialogState extends State<PdfFullscreenPreviewDialog> {
+  PdfController? _pdfController;
+  final TransformationController _transformationController = TransformationController();
+  int _currentPage = 1;
+  int _totalPages = 1;
+  bool _isLoadingPdf = true;
+  String? _pdfError;
+  double _currentScale = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPage = widget.initialPage;
+    _transformationController.addListener(_onTransformationChanged);
+    _initPdfController();
+  }
+
+  void _onTransformationChanged() {
+    final scale = _transformationController.value.getMaxScaleOnAxis();
+    if ((scale - _currentScale).abs() > 0.02) {
+      setState(() {
+        _currentScale = scale;
+      });
+    }
+  }
+
+  Uint8List _getCleanNormalizedPdfBytes() {
+    Uint8List bytesToOpen = widget.pdfBytes;
+    int startIdx = -1;
+    for (int i = 0; i <= bytesToOpen.length - 5; i++) {
+      if (bytesToOpen[i] == 0x25 &&
+          bytesToOpen[i + 1] == 0x50 &&
+          bytesToOpen[i + 2] == 0x44 &&
+          bytesToOpen[i + 3] == 0x46 &&
+          bytesToOpen[i + 4] == 0x2D) {
+        startIdx = i;
+        break;
+      }
+    }
+
+    if (startIdx > 0) {
+      int endIdx = -1;
+      for (int i = bytesToOpen.length - 5; i >= startIdx; i--) {
+        if (bytesToOpen[i] == 0x25 &&
+            bytesToOpen[i + 1] == 0x25 &&
+            bytesToOpen[i + 2] == 0x45 &&
+            bytesToOpen[i + 3] == 0x4F &&
+            bytesToOpen[i + 4] == 0x46) {
+          endIdx = i + 5;
+          while (endIdx < bytesToOpen.length &&
+              (bytesToOpen[endIdx] == 0x0D || bytesToOpen[endIdx] == 0x0A || bytesToOpen[endIdx] == 0x20)) {
+            endIdx++;
+          }
+          break;
+        }
+      }
+      if (endIdx != -1) {
+        bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx, endIdx));
+      } else {
+        bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx));
+      }
+    }
+
+    return PolyglotInspector.normalizePdfStream(bytesToOpen, startIdx > 0 ? startIdx : 0);
+  }
+
+  Future<void> _initPdfController() async {
+    _pdfController?.dispose();
+    _pdfController = null;
+    _transformationController.value = Matrix4.identity();
+    setState(() {
+      _isLoadingPdf = true;
+      _pdfError = null;
+      _currentScale = 1.0;
+    });
+
+    try {
+      if (widget.pdfBytes.isEmpty) {
+        throw Exception('PDF byte stream is empty');
+      }
+
+      final bytesToOpen = _getCleanNormalizedPdfBytes();
+      final doc = await PdfDocument.openData(bytesToOpen);
+      _totalPages = doc.pagesCount > 0 ? doc.pagesCount : 1;
+
+      final startPage = widget.initialPage.clamp(1, _totalPages);
+      _currentPage = startPage;
+
+      _pdfController = PdfController(
+        document: PdfDocument.openData(bytesToOpen),
+        initialPage: startPage,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoadingPdf = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingPdf = false;
+          _pdfError = '$e';
+        });
+      }
+    }
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      final isCtrlOrMeta = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
+      if (isCtrlOrMeta) {
+        GestureBinding.instance.pointerSignalResolver.register(event, (resolvedEvent) {
+          if (resolvedEvent is PointerScrollEvent) {
+            final scrollDelta = resolvedEvent.scrollDelta.dy;
+            if (scrollDelta == 0) return;
+
+            final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
+            final newScale = (_currentScale * zoomFactor).clamp(0.8, 5.0);
+            if ((newScale - _currentScale).abs() < 0.001) return;
+
+            final effectiveFactor = newScale / _currentScale;
+            final focalPoint = resolvedEvent.localPosition;
+            final currentMatrix = _transformationController.value;
+            final currentTrans = currentMatrix.getTranslation();
+
+            final double tx = focalPoint.dx - effectiveFactor * (focalPoint.dx - currentTrans.x);
+            final double ty = focalPoint.dy - effectiveFactor * (focalPoint.dy - currentTrans.y);
+
+            _currentScale = newScale;
+            if (newScale <= 1.02 && newScale >= 0.98 && tx.abs() < 2 && ty.abs() < 2) {
+              _currentScale = 1.0;
+              _transformationController.value = Matrix4.identity();
+            } else {
+              final Matrix4 newMatrix = Matrix4.identity()
+                ..setEntry(0, 0, newScale)
+                ..setEntry(1, 1, newScale)
+                ..setEntry(2, 2, 1.0)
+                ..setEntry(0, 3, tx)
+                ..setEntry(1, 3, ty);
+              _transformationController.value = newMatrix;
+            }
+            setState(() {});
+          }
+        });
+      }
+    }
+  }
+
+  void _toggleDoubleTapZoom(TapDownDetails details) {
+    if (_currentScale > 1.25) {
+      _resetZoom();
+    } else {
+      final position = details.localPosition;
+      const double targetScale = 2.2;
+      final effectiveFactor = targetScale / _currentScale;
+      final currentTrans = _transformationController.value.getTranslation();
+      final double tx = position.dx - effectiveFactor * (position.dx - currentTrans.x);
+      final double ty = position.dy - effectiveFactor * (position.dy - currentTrans.y);
+
+      _currentScale = targetScale;
+      final matrix = Matrix4.identity()
+        ..setEntry(0, 0, targetScale)
+        ..setEntry(1, 1, targetScale)
+        ..setEntry(2, 2, 1.0)
+        ..setEntry(0, 3, tx)
+        ..setEntry(1, 3, ty);
+      _transformationController.value = matrix;
+      setState(() {});
+    }
+  }
+
+  void _zoomToScale(double targetScale) {
+    targetScale = targetScale.clamp(0.8, 5.0);
+    if ((targetScale - _currentScale).abs() < 0.001) return;
+    _currentScale = targetScale;
+    if (targetScale <= 1.02 && targetScale >= 0.98) {
+      _currentScale = 1.0;
+      _transformationController.value = Matrix4.identity();
+    } else {
+      _transformationController.value = Matrix4.identity()
+        ..setEntry(0, 0, targetScale)
+        ..setEntry(1, 1, targetScale)
+        ..setEntry(2, 2, 1.0);
+    }
+    setState(() {});
+  }
+
+  void _zoomIn() {
+    _zoomToScale(_currentScale * 1.25);
+  }
+
+  void _zoomOut() {
+    _zoomToScale(_currentScale * 0.8);
+  }
+
+  void _resetZoom() {
+    _currentScale = 1.0;
+    _transformationController.value = Matrix4.identity();
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _transformationController.removeListener(_onTransformationChanged);
+    _transformationController.dispose();
+    _pdfController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = Get.isRegistered<PolyglotController>() ? Get.find<PolyglotController>() : null;
+    final isZoomed = (_currentScale - 1.0).abs() > 0.05;
+
+    final isNarrow = MediaQuery.sizeOf(context).width < 500;
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0F12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderSubtle),
+          boxShadow: const [
+            BoxShadow(color: Colors.black54, blurRadius: 20, offset: Offset(0, 8)),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            // Top App Bar in Modal
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: const BoxDecoration(
+                color: AppTheme.surface,
+                border: Border(bottom: BorderSide(color: AppTheme.borderSubtle)),
+              ),
+              child: isNarrow
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Row 1: Title and Actions
+                        Row(
+                          children: [
+                            const Icon(Icons.picture_as_pdf_outlined, size: 15, color: AppTheme.accent),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                widget.fileName,
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (widget.onExport != null || controller != null) ...[
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.download_outlined, size: 15, color: AppTheme.textSecondary),
+                                tooltip: 'Export PDF Document',
+                                onPressed: () {
+                                  if (widget.onExport != null) {
+                                    widget.onExport!();
+                                  } else {
+                                    controller?.extractPdfFile();
+                                  }
+                                },
+                              ),
+                            ],
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.close_rounded, size: 16, color: AppTheme.textSecondary),
+                              tooltip: 'Close Fullscreen',
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        // Row 2: Page Controls & Zoom Controls
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // Page Controls
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceElevated,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: AppTheme.borderSubtle),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.arrow_back_ios_rounded, size: 11, color: AppTheme.textSecondary),
+                                    tooltip: 'Previous Page',
+                                    onPressed: _currentPage > 1
+                                        ? () => _pdfController?.previousPage(duration: const Duration(milliseconds: 200), curve: Curves.easeInOut)
+                                        : null,
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: Text(
+                                      '$_currentPage / $_totalPages',
+                                      style: const TextStyle(fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.arrow_forward_ios_rounded, size: 11, color: AppTheme.textSecondary),
+                                    tooltip: 'Next Page',
+                                    onPressed: _currentPage < _totalPages
+                                        ? () => _pdfController?.nextPage(duration: const Duration(milliseconds: 200), curve: Curves.easeInOut)
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // Zoom Controls
+                            Container(
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceElevated,
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: AppTheme.borderSubtle),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.remove_rounded, size: 13, color: AppTheme.textSecondary),
+                                    tooltip: 'Zoom Out',
+                                    onPressed: _currentScale > 0.85 ? _zoomOut : null,
+                                  ),
+                                  InkWell(
+                                    onTap: isZoomed ? _resetZoom : null,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                      child: Text(
+                                        '${(_currentScale * 100).round()}%',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontFamily: 'monospace',
+                                          fontWeight: FontWeight.bold,
+                                          color: isZoomed ? AppTheme.accent : AppTheme.textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.add_rounded, size: 13, color: AppTheme.textSecondary),
+                                    tooltip: 'Zoom In',
+                                    onPressed: _currentScale < 3.95 ? _zoomIn : null,
+                                  ),
+                                  if (isZoomed) ...[
+                                    IconButton(
+                                      visualDensity: VisualDensity.compact,
+                                      icon: const Icon(Icons.restart_alt_rounded, size: 12, color: AppTheme.accent),
+                                      tooltip: 'Reset Zoom',
+                                      onPressed: _resetZoom,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        const Icon(Icons.picture_as_pdf_outlined, size: 16, color: AppTheme.accent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            widget.fileName,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Page controls in header
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceElevated,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: AppTheme.borderSubtle),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.arrow_back_ios_rounded, size: 12, color: AppTheme.textSecondary),
+                                tooltip: 'Previous Page',
+                                onPressed: _currentPage > 1
+                                    ? () => _pdfController?.previousPage(duration: const Duration(milliseconds: 200), curve: Curves.easeInOut)
+                                    : null,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: Text(
+                                  '$_currentPage / $_totalPages',
+                                  style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppTheme.textSecondary),
+                                tooltip: 'Next Page',
+                                onPressed: _currentPage < _totalPages
+                                    ? () => _pdfController?.nextPage(duration: const Duration(milliseconds: 200), curve: Curves.easeInOut)
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Zoom Controls
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceElevated,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: AppTheme.borderSubtle),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.remove_rounded, size: 14, color: AppTheme.textSecondary),
+                                tooltip: 'Zoom Out',
+                                onPressed: _currentScale > 0.85 ? _zoomOut : null,
+                              ),
+                              InkWell(
+                                onTap: isZoomed ? _resetZoom : null,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                  child: Text(
+                                    '${(_currentScale * 100).round()}%',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                      color: isZoomed ? AppTheme.accent : AppTheme.textMuted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.add_rounded, size: 14, color: AppTheme.textSecondary),
+                                tooltip: 'Zoom In',
+                                onPressed: _currentScale < 3.95 ? _zoomIn : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        if (widget.onExport != null || controller != null) ...[
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.download_outlined, size: 15, color: AppTheme.textSecondary),
+                            tooltip: 'Export PDF Document',
+                            onPressed: () {
+                              if (widget.onExport != null) {
+                                widget.onExport!();
+                              } else {
+                                controller?.extractPdfFile();
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.close_rounded, size: 16, color: AppTheme.textSecondary),
+                          tooltip: 'Close Fullscreen',
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+            ),
+
+            // Modal Body PDF Viewport (supports pinch-to-zoom & double-tap zoom)
+            Expanded(
+              child: _isLoadingPdf
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary))
+                  : _pdfError != null || _pdfController == null
+                      ? Center(child: Text(_pdfError ?? 'Could not load PDF in fullscreen', style: const TextStyle(color: AppTheme.danger, fontSize: 11)))
+                      : Listener(
+                          onPointerSignal: _onPointerSignal,
+                          child: GestureDetector(
+                            onDoubleTapDown: _toggleDoubleTapZoom,
+                            onDoubleTap: () {},
+                            child: ClipRect(
+                              child: InteractiveViewer(
+                                transformationController: _transformationController,
+                                minScale: 0.8,
+                                maxScale: 5.0,
+                                boundaryMargin: const EdgeInsets.all(120),
+                                clipBehavior: Clip.none,
+                                child: PdfView(
+                                  controller: _pdfController!,
+                                  onPageChanged: (page) {
+                                    setState(() {
+                                      _currentPage = page;
+                                    });
+                                  },
+                                  builders: PdfViewBuilders<DefaultBuilderOptions>(
+                                    options: const DefaultBuilderOptions(
+                                      loaderSwitchDuration: Duration(milliseconds: 150),
+                                    ),
+                                    documentLoaderBuilder: (_) => const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                                    ),
+                                    pageLoaderBuilder: (_) => const Center(
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                                    ),
+                                    errorBuilder: (_, error) => Center(
+                                      child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
             ),
           ],
         ),

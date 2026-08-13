@@ -303,7 +303,7 @@ class _MobileHomeViewState extends State<MobileHomeView> {
                           const SizedBox(height: 5),
                           Text(
                             controller.statusMessage.value,
-                            style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                            style: const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary),
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 6),
@@ -318,7 +318,7 @@ class _MobileHomeViewState extends State<MobileHomeView> {
                                   backgroundColor: res != null ? AppTheme.surfaceElevated : AppTheme.primary,
                                   foregroundColor: res != null ? AppTheme.textPrimary : const Color(0xFF0D0F12),
                                   side: res != null ? const BorderSide(color: AppTheme.borderSubtle) : null,
-                                  padding: const EdgeInsets.symmetric(vertical: 13),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 ),
                                 onPressed: controller.canGenerate ? () => controller.generatePolyglotInMemory() : null,
@@ -326,13 +326,13 @@ class _MobileHomeViewState extends State<MobileHomeView> {
                                   controller.isGenerating.value
                                       ? Icons.hourglass_top
                                       : (res != null ? Icons.refresh : Icons.bolt),
-                                  size: 15,
+                                  size: 17,
                                 ),
                                 label: Text(
                                   controller.isGenerating.value
                                       ? 'Synthesizing...'
                                       : (res != null ? 'Re-generate' : 'Generate Polyglot'),
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -347,14 +347,14 @@ class _MobileHomeViewState extends State<MobileHomeView> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.primary,
                                     foregroundColor: const Color(0xFF0D0F12),
-                                    padding: const EdgeInsets.symmetric(vertical: 13),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
                                   onPressed: () => controller.saveToDisk(),
-                                  icon: const Icon(Icons.save_alt, size: 15),
+                                  icon: const Icon(Icons.save_alt, size: 17),
                                   label: const Text(
                                     'Save to Disk',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ),
@@ -376,12 +376,12 @@ class _MobileHomeViewState extends State<MobileHomeView> {
   Widget _buildMobileSectionTitle(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 13, color: AppTheme.textSecondary),
+        Icon(icon, size: 15, color: AppTheme.textSecondary),
         const SizedBox(width: 6),
         Text(
           title,
           style: const TextStyle(
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: FontWeight.bold,
             letterSpacing: 0.2,
             color: AppTheme.textPrimary,

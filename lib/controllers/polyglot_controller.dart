@@ -304,7 +304,8 @@ class PolyglotController extends GetxController {
       progress.value = 0.7;
       statusMessage.value = 'Synthesizing polyglot binary in RAM...';
 
-      final result = await PolyglotGenerator.generate(
+      final result = await compute(
+        _runGenerateInIsolate,
         PolyglotInputs(
           imageBytes: imageBytes,
           imageName: imageFile.value!.name,
@@ -322,12 +323,6 @@ class PolyglotController extends GetxController {
       progress.value = 1.0;
       statusMessage.value = 'Polyglot binary ready in memory!';
       polyglotResult.value = result;
-
-      // Auto-inspect the newly generated result
-      inspectionResult.value = await compute(
-        _runInspectInIsolate,
-        _InspectParams(result.data, combinedFileName),
-      );
 
       Notify.success(
         'Polyglot Ready',
@@ -667,4 +662,8 @@ class _InspectParams {
 
 PolyglotInspectionResult _runInspectInIsolate(_InspectParams params) {
   return PolyglotInspector.inspect(bytes: params.bytes, fileName: params.fileName);
+}
+
+Future<PolyglotResult> _runGenerateInIsolate(PolyglotInputs inputs) {
+  return PolyglotGenerator.generate(inputs);
 }

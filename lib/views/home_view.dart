@@ -36,15 +36,15 @@ class _HomeViewState extends State<HomeView> {
 
       return Scaffold(
         appBar: AppBar(
-          leadingWidth: 38,
+          leadingWidth: isWide ? 38 : 42,
           titleSpacing: 4,
           leading: Padding(
             padding: const EdgeInsets.only(left: 8.0),
             child: Center(
               child: Image.asset(
                 'assets/logo/logo_small.png',
-                width: 24,
-                height: 24,
+                width: isWide ? 24 : 28,
+                height: isWide ? 24 : 28,
                 fit: BoxFit.contain,
               ),
             ),
@@ -52,17 +52,21 @@ class _HomeViewState extends State<HomeView> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Flexible(
+              Flexible(
                 child: Text(
                   'Polyglot Studio',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: AppTheme.trackingTight),
+                  style: TextStyle(
+                    fontSize: isWide ? 13 : 15,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: AppTheme.trackingTight,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (version.isNotEmpty) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  padding: EdgeInsets.symmetric(horizontal: isWide ? 5 : 6, vertical: isWide ? 2 : 2.5),
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceElevated,
                     borderRadius: BorderRadius.circular(4),
@@ -70,8 +74,8 @@ class _HomeViewState extends State<HomeView> {
                   ),
                   child: Text(
                     'v$version',
-                    style: const TextStyle(
-                      fontSize: 10,
+                    style: TextStyle(
+                      fontSize: isWide ? 10 : 11,
                       fontFamily: 'monospace',
                       fontWeight: FontWeight.w600,
                       color: AppTheme.textMuted,
@@ -128,8 +132,8 @@ class _HomeViewState extends State<HomeView> {
             const SizedBox(width: 4),
 
             IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.refresh, color: AppTheme.textSecondary, size: 16),
+              visualDensity: isWide ? VisualDensity.compact : VisualDensity.standard,
+              icon: Icon(Icons.refresh, color: AppTheme.textSecondary, size: isWide ? 16 : 20),
               tooltip: 'Reset All',
               onPressed: () => controller.reset(),
             ),
@@ -359,7 +363,7 @@ class _HomeViewState extends State<HomeView> {
       borderRadius: BorderRadius.circular(8),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.surface : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -367,19 +371,23 @@ class _HomeViewState extends State<HomeView> {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               icon,
-              size: 14,
+              size: 16,
               color: isSelected ? AppTheme.textPrimary : AppTheme.textMuted,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

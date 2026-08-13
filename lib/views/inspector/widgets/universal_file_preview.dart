@@ -23,6 +23,8 @@ class UniversalFilePreview extends StatelessWidget {
   final String? explicitFormat;
   final VoidCallback? onExport;
   final PolyglotInspectionResult? precomputedInspection;
+  final bool isEmbedded;
+  final double? customViewportHeight;
 
   const UniversalFilePreview({
     super.key,
@@ -31,6 +33,8 @@ class UniversalFilePreview extends StatelessWidget {
     this.explicitFormat,
     this.onExport,
     this.precomputedInspection,
+    this.isEmbedded = false,
+    this.customViewportHeight,
   });
 
   /// Opens a modular, responsive modal preview dialog for any file anywhere in the app.
@@ -130,6 +134,8 @@ class UniversalFilePreview extends StatelessWidget {
         fileName: fileName,
         pdfInfo: inspection.pdfInfo,
         onExport: onExport,
+        isEmbedded: isEmbedded,
+        customViewportHeight: customViewportHeight,
       );
     }
 
@@ -154,6 +160,7 @@ class UniversalFilePreview extends StatelessWidget {
         format: ext.isNotEmpty ? ext : '.mp4',
         mediaInfo: inspection.mediaInfo,
         onExport: onExport,
+        isEmbedded: isEmbedded,
       );
     }
 
@@ -204,69 +211,75 @@ class UniversalFilePreview extends StatelessWidget {
   }
 
   Widget _buildImagePreview(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => ImagePreviewDialog.show(
-                context,
-                imageBytes: bytes,
-                fileName: fileName,
-                onExport: onExport,
-              ),
-              child: Center(
-                child: InteractiveViewer(
-                  maxScale: 4.0,
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Text('Invalid Image Data', style: TextStyle(fontSize: 10, color: AppTheme.danger)),
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFF0A0C10),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => ImagePreviewDialog.show(
+                  context,
+                  imageBytes: bytes,
+                  fileName: fileName,
+                  onExport: onExport,
+                ),
+                child: Center(
+                  child: InteractiveViewer(
+                    maxScale: 4.0,
+                    child: Image.memory(
+                      bytes,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Text('Invalid Image Data', style: TextStyle(fontSize: 10, color: AppTheme.danger)),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-        Positioned(
-          bottom: 12,
-          right: 12,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => ImagePreviewDialog.show(
-                context,
-                imageBytes: bytes,
-                fileName: fileName,
-                onExport: onExport,
-              ),
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(200),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppTheme.borderSubtle.withAlpha(140)),
+          Positioned(
+            bottom: 12,
+            right: 12,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => ImagePreviewDialog.show(
+                  context,
+                  imageBytes: bytes,
+                  fileName: fileName,
+                  onExport: onExport,
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.zoom_in_rounded, size: 13, color: AppTheme.accent),
-                    SizedBox(width: 5),
-                    Text(
-                      'Click to Enlarge',
-                      style: TextStyle(fontSize: 10.5, color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
-                    ),
-                  ],
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(200),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.borderSubtle.withAlpha(140)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.zoom_in_rounded, size: 13, color: AppTheme.accent),
+                      SizedBox(width: 5),
+                      Text(
+                        'Click to Enlarge',
+                        style: TextStyle(fontSize: 10.5, color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

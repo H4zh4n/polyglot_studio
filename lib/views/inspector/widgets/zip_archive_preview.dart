@@ -620,10 +620,9 @@ class _ZipArchivePreviewState extends State<ZipArchivePreview> {
   Widget _buildSelectedEntryPreview(ZipEntryInfo entry) {
     final bytes = entry.isDirectory ? null : _getDecompressedBytes(entry.name);
     final ext = p.extension(entry.name).toLowerCase();
-    final isImageFile = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.ico', '.gif'].contains(ext);
 
     return Container(
-      constraints: const BoxConstraints(minHeight: 380, maxHeight: 520),
+      constraints: const BoxConstraints(minHeight: 380, maxHeight: 540),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFF0F1216),
@@ -645,41 +644,24 @@ class _ZipArchivePreviewState extends State<ZipArchivePreview> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (!entry.isDirectory) ...[
-                if (isImageFile && bytes != null) ...[
-                  const SizedBox(width: 6),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: AppTheme.surfaceElevated,
-                      foregroundColor: AppTheme.textPrimary,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      side: const BorderSide(color: AppTheme.borderSubtle),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () => ImagePreviewDialog.show(
-                      context,
-                      imageBytes: bytes,
-                      fileName: entry.name,
-                      onExport: () => _extractSingleEntry(entry),
-                    ),
-                    icon: const Icon(Icons.fullscreen_rounded, size: 13, color: AppTheme.accent),
-                    label: const Text('Enlarge', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+              if (!entry.isDirectory && bytes != null) ...[
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.fullscreen_rounded, size: 16, color: AppTheme.accent),
+                  tooltip: 'Fullscreen / Enlarge Preview',
+                  onPressed: () => UniversalFilePreview.show(
+                    context,
+                    bytes: bytes,
+                    fileName: entry.name,
+                    explicitFormat: ext,
+                    onExport: () => _extractSingleEntry(entry),
                   ),
-                ],
-                const SizedBox(width: 6),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: AppTheme.surfaceElevated,
-                    foregroundColor: AppTheme.textPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    side: const BorderSide(color: AppTheme.borderSubtle),
-                    visualDensity: VisualDensity.compact,
-                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.download_rounded, size: 15, color: AppTheme.textSecondary),
+                  tooltip: 'Extract File',
                   onPressed: () => _extractSingleEntry(entry),
-                  icon: const Icon(Icons.download_rounded, size: 12, color: AppTheme.textSecondary),
-                  label: const Text('Extract', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
                 ),
               ],
             ],
@@ -734,6 +716,8 @@ class _ZipArchivePreviewState extends State<ZipArchivePreview> {
       bytes: bytes,
       fileName: entry.name,
       explicitFormat: ext,
+      isEmbedded: true,
+      customViewportHeight: 340,
       onExport: () => _extractSingleEntry(entry),
     );
   }
