@@ -48,7 +48,7 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
   String? _errorMessage;
   String? _tempFilePath;
 
-  AudioVisualizerMode _visualizerMode = AudioVisualizerMode.spectrum;
+  AudioVisualizerMode _visualizerMode = AudioVisualizerMode.overview;
 
   // Track timeline overview peaks
   List<double> _waveformPeaks = List.filled(40, 0.25);
@@ -467,9 +467,9 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        _buildModeTab(AudioVisualizerMode.overview, 'Overview', Icons.graphic_eq_rounded),
                         _buildModeTab(AudioVisualizerMode.spectrum, 'Spectrum', Icons.bar_chart_rounded),
                         _buildModeTab(AudioVisualizerMode.oscilloscope, 'Wave', Icons.waves_rounded),
-                        _buildModeTab(AudioVisualizerMode.overview, 'Overview', Icons.graphic_eq_rounded),
                       ],
                     ),
                   ),
