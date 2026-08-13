@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 /// Interactive button displaying GitHub profile avatar and link to https://github.com/H4zh4n
 class GithubLinkButton extends StatelessWidget {
   static const String githubUrl = 'https://github.com/H4zh4n';
+  static const String avatarAsset = 'assets/images/dev.jpg';
   static const String avatarUrl = 'https://github.com/H4zh4n.png';
   static const String username = 'H4zh4n';
 
@@ -37,10 +38,10 @@ class GithubLinkButton extends StatelessWidget {
         message: 'App Info & Author (@$username)',
         child: InkWell(
           onTap: handleTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 2.0),
-            child: _buildAvatar(size: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+            child: _buildAvatar(size: 28),
           ),
         ),
       );
@@ -62,12 +63,12 @@ class GithubLinkButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildAvatar(size: 18),
+                _buildAvatar(size: 20),
                 const SizedBox(width: 6),
                 const Text(
                   username,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
                     letterSpacing: 0.2,
@@ -90,7 +91,7 @@ class GithubLinkButton extends StatelessWidget {
       onTap: launch,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: AppTheme.surfaceElevated,
           borderRadius: BorderRadius.circular(8),
@@ -98,8 +99,8 @@ class GithubLinkButton extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _buildAvatar(size: 32),
-            const SizedBox(width: 12),
+            _buildAvatar(size: 42),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,16 +109,16 @@ class GithubLinkButton extends StatelessWidget {
                   Text(
                     'Created by $username',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
                     ),
                   ),
-                  SizedBox(height: 2),
+                  SizedBox(height: 3),
                   Text(
                     'github.com/$username',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 11,
                       fontFamily: 'monospace',
                       color: AppTheme.accent,
                     ),
@@ -127,7 +128,7 @@ class GithubLinkButton extends StatelessWidget {
             ),
             const Icon(
               Icons.open_in_new,
-              size: 14,
+              size: 15,
               color: AppTheme.textSecondary,
             ),
           ],
@@ -142,34 +143,43 @@ class GithubLinkButton extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: AppTheme.borderSubtle, width: 1),
+        border: Border.all(color: AppTheme.borderStrong, width: 1.2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1)),
+        ],
       ),
       child: ClipOval(
-        child: Image.network(
-          avatarUrl,
+        child: Image.asset(
+          avatarAsset,
           width: size,
           height: size,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            color: AppTheme.surface,
-            child: Icon(Icons.person, size: size * 0.65, color: AppTheme.textMuted),
-          ),
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
+          errorBuilder: (_, __, ___) => Image.network(
+            avatarUrl,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
               color: AppTheme.surface,
-              child: Center(
-                child: SizedBox(
-                  width: size * 0.5,
-                  height: size * 0.5,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: AppTheme.accent,
+              child: Icon(Icons.person, size: size * 0.65, color: AppTheme.textMuted),
+            ),
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                color: AppTheme.surface,
+                child: Center(
+                  child: SizedBox(
+                    width: size * 0.5,
+                    height: size * 0.5,
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: AppTheme.accent,
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

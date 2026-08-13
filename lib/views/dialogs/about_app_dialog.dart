@@ -94,7 +94,7 @@ class AboutAppDialog extends StatelessWidget {
                         Text(
                           appName.isNotEmpty ? appName : 'Polyglot Studio',
                           style: const TextStyle(
-                            fontSize: 14,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: AppTheme.textPrimary,
                             letterSpacing: AppTheme.trackingTight,
@@ -103,14 +103,14 @@ class AboutAppDialog extends StatelessWidget {
                         const SizedBox(height: 2),
                         const Text(
                           'Cross-Platform Media Polyglot Suite',
-                          style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.close, size: 16, color: AppTheme.textMuted),
+                    icon: const Icon(Icons.close, size: 18, color: AppTheme.textMuted),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -147,7 +147,7 @@ class AboutAppDialog extends StatelessWidget {
 
               const Text(
                 'Generates and inspects multi-format polyglot files combining valid ICO, MP4/M4A, HTML, PDF, and ZIP container payloads into a single file.',
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, height: 1.4),
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.45),
               ),
 
               const SizedBox(height: 16),
@@ -163,14 +163,14 @@ class AboutAppDialog extends StatelessWidget {
                   style: TextButton.styleFrom(
                     foregroundColor: AppTheme.textPrimary,
                     backgroundColor: AppTheme.surfaceElevated,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                       side: const BorderSide(color: AppTheme.borderSubtle),
                     ),
                   ),
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
