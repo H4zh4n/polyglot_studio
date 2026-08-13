@@ -593,26 +593,45 @@ class PolyglotInspector {
         }
         zipOffset ??= i;
 
-        // Decode internal files using archive ZipDecoder
+        // Decode internal files using archive ZipDecoder with resilient container fallback
         try {
-          final zipData = bytes.sublist(zipOffset);
-          extractedZipBytes = Uint8List.fromList(zipData);
-          final archive = ZipDecoder().decodeBytes(zipData, verify: false);
-          for (final file in archive.files) {
-            final isEncrypted = file.isEncrypted;
-            final method = file.compressMethod == 0 ? 'Stored' : 'Deflated';
-            zipEntries.add(
-              ZipEntryInfo(
-                name: file.name,
-                size: file.size,
-                compressedSize: file.rawContent?.length ?? file.size,
-                isDirectory: !file.isFile || file.name.endsWith('/'),
-                lastModified: file.lastModDateTime,
-                crc32: file.crc32,
-                compressionMethod: method,
-                isEncrypted: isEncrypted,
-              ),
-            );
+          Archive? archive;
+          // 1. Try decoding from zipOffset sublist
+          if (zipOffset < bytes.length) {
+            try {
+              final zipData = bytes.sublist(zipOffset);
+              archive = ZipDecoder().decodeBytes(zipData, verify: false);
+              extractedZipBytes = Uint8List.fromList(zipData);
+            } catch (_) {}
+          }
+          // 2. If sublist failed (e.g. polyglot has container-absolute offsets in Central Directory),
+          // decode from full container bytes where offsets align accurately
+          if (archive == null || archive.isEmpty) {
+            try {
+              archive = ZipDecoder().decodeBytes(bytes, verify: false);
+              if (archive.isNotEmpty) {
+                final encoded = ZipEncoder().encode(archive);
+                extractedZipBytes = Uint8List.fromList(encoded);
+              }
+            } catch (_) {}
+          }
+
+          if (archive != null) {
+            for (final file in archive.files) {
+              final rawLen = file.rawContent?.length ?? file.size;
+              final method = (rawLen < file.size) ? 'Deflated' : 'Stored';
+              zipEntries.add(
+                ZipEntryInfo(
+                  name: file.name,
+                  size: file.size,
+                  compressedSize: rawLen,
+                  isDirectory: !file.isFile || file.name.endsWith('/'),
+                  lastModified: file.lastModDateTime,
+                  crc32: file.crc32,
+                  compressionMethod: method,
+                ),
+              );
+            }
           }
         } catch (_) {}
 

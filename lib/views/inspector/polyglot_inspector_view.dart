@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -11,6 +12,7 @@ import 'widgets/html_document_preview.dart';
 import 'widgets/image_preview_dialog.dart';
 import 'widgets/pdf_document_preview.dart';
 import 'widgets/video_player_preview.dart';
+import 'widgets/zip_archive_preview.dart';
 
 class _InspectorTabItem {
   final String id;
@@ -808,107 +810,17 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
   }
 
   Widget _buildZipPreview(PolyglotInspectionResult res) {
-    final entries = res.zipEntries;
-    if (entries.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.background,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.borderSubtle),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.folder_zip_outlined, size: 14, color: AppTheme.textMuted),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'ZIP End of Central Directory (EOCD) signature located at file tail.',
-                style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    final zipBytes = res.extractedZipBytes ??
+        (res.zipOffset != null && res.rawBytes != null && res.zipOffset! < res.rawBytes!.length
+            ? Uint8List.fromList(res.rawBytes!.sublist(res.zipOffset!))
+            : (res.rawBytes ?? Uint8List(0)));
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderSubtle),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.folder_zip, size: 14, color: AppTheme.accent),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Archive Explorer (${entries.length} ${entries.length == 1 ? 'entry' : 'entries'})',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Central Dir: Byte ${NumberUtils.formatInt(res.zipOffset ?? 0)}',
-                style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textMuted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            constraints: const BoxConstraints(maxHeight: 180),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.borderSubtle),
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: entries.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.borderSubtle),
-              itemBuilder: (context, i) {
-                final entry = entries[i];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  child: Row(
-                    children: [
-                      Icon(
-                        entry.isDirectory ? Icons.folder_outlined : Icons.insert_drive_file_outlined,
-                        size: 13,
-                        color: entry.isDirectory ? AppTheme.accent : AppTheme.textSecondary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          entry.name,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontFamily: 'monospace',
-                            color: AppTheme.textPrimary,
-                            fontWeight: entry.isDirectory ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        NumberUtils.formatSizeKb(entry.size),
-                        style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textMuted),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+    return ZipArchivePreview(
+      zipBytes: zipBytes,
+      rawBytes: res.rawBytes,
+      fileName: res.fileName,
+      zipOffset: res.zipOffset,
+      entries: res.zipEntries,
     );
   }
 

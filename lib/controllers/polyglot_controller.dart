@@ -544,6 +544,41 @@ class PolyglotController extends GetxController {
     }
   }
 
+  // Extract detected ZIP archive content to a file
+  Future<void> extractZipFile() async {
+    final res = inspectionResult.value;
+    if (res == null || res.extractedZipBytes == null) return;
+
+    final baseName = p.basenameWithoutExtension(res.fileName);
+    final defaultName = '${baseName}_extracted.zip';
+    final bytesToSave = res.extractedZipBytes!;
+
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Extracted ZIP Archive to Disk',
+      fileName: defaultName,
+      type: FileType.custom,
+      allowedExtensions: ['zip', 'jar', 'apk', 'docx', 'xlsx', 'pptx'],
+      bytes: bytesToSave,
+    );
+
+    if (kIsWeb) {
+      Notify.success(
+        'ZIP Downloaded',
+        description: 'Downloaded $defaultName (${NumberUtils.formatBytesExact(bytesToSave.length)})',
+      );
+      return;
+    }
+
+    if (savePath != null) {
+      final file = File(savePath);
+      await file.writeAsBytes(bytesToSave);
+      Notify.success(
+        'ZIP Extracted',
+        description: 'Saved ZIP (${NumberUtils.formatBytesExact(bytesToSave.length)}) to $savePath',
+      );
+    }
+  }
+
   void clearInspection() {
     inspectionResult.value = null;
   }

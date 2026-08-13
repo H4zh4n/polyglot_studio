@@ -12,6 +12,7 @@ import 'package:polyglot/views/dialogs/polyglot_detected_dialog.dart';
 import 'package:polyglot/views/inspector/widgets/audio_player_preview.dart';
 import 'package:polyglot/views/inspector/widgets/html_document_preview.dart';
 import 'package:polyglot/views/inspector/widgets/pdf_document_preview.dart';
+import 'package:polyglot/views/inspector/widgets/zip_archive_preview.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 
 void main() {
@@ -100,9 +101,10 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, '.zip'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Archive Explorer (2 entries)'), findsOneWidget);
-    expect(find.text('embedded_file.txt'), findsOneWidget);
-    expect(find.text('assets/image.png'), findsOneWidget);
+    expect(find.byType(ZipArchivePreview), findsOneWidget);
+    expect(find.text('Archive Files (2)'), findsOneWidget);
+    expect(find.text('embedded_file.txt'), findsWidgets);
+    expect(find.text('assets/image.png'), findsWidgets);
 
     // Tap on Header Space ChoiceChip
     await tester.tap(find.widgetWithText(ChoiceChip, 'Header Space'));
@@ -415,21 +417,16 @@ void main() {
     expect(find.byType(HtmlDocumentPreview), findsOneWidget);
     expect(find.text('Test App'), findsWidgets);
     expect(find.text('Open in Browser'), findsOneWidget);
+    expect(find.text('Code Source & Web'), findsOneWidget);
     expect(find.text('Overview & DOM'), findsOneWidget);
-    expect(find.text('Code Source'), findsOneWidget);
     expect(find.text('JavaScript (1)'), findsOneWidget);
     expect(find.text('CSS & Styles (1)'), findsOneWidget);
-
-    // Switch to Code Source tab
-    await tester.tap(find.text('Code Source'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget); // Search bar
-    expect(find.text('Render in App'), findsOneWidget);
-
-    // Toggle In-App Render
-    await tester.tap(find.text('Render in App'));
-    await tester.pumpAndSettle();
     expect(find.text('CSS3 Engine Active'), findsOneWidget);
+
+    // Switch to Overview tab
+    await tester.tap(find.text('Overview & DOM'));
+    await tester.pumpAndSettle();
+    expect(find.text('Document Element Statistics'), findsOneWidget);
   });
 
   testWidgets('PDF format in inspector displays PdfDocumentPreview with navigation and tabs', (WidgetTester tester) async {
@@ -492,5 +489,160 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.text('PDF Object Architecture & XREF Table'), findsOneWidget);
+  });
+
+  testWidgets('ZIP format in inspector displays ZipArchivePreview with explorer, search, and audit tabs',
+      (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 1; // Inspector tab
+
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'bundle.zip',
+      fileSize: 2048,
+      headerBytes: Uint8List(288),
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: false,
+      hasPdfStream: false,
+      hasZipEocd: true,
+      zipOffset: 512,
+      detectedFormats: ['.zip'],
+      zipEntries: const [
+        ZipEntryInfo(
+          name: 'notes.txt',
+          size: 1024,
+          compressedSize: 450,
+          crc32: 0x12345678,
+          compressionMethod: 'Deflated',
+        ),
+        ZipEntryInfo(
+          name: 'data.json',
+          size: 2048,
+          compressedSize: 800,
+          crc32: 0x87654321,
+          compressionMethod: 'Deflated',
+        ),
+        ZipEntryInfo(
+          name: 'assets/',
+          size: 0,
+          compressedSize: 0,
+          isDirectory: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pumpAndSettle();
+
+    // Verify ZipArchivePreview is rendered
+    expect(find.byType(ZipArchivePreview), findsOneWidget);
+    expect(find.text('bundle.zip'), findsWidgets);
+    expect(find.text('Extract All'), findsOneWidget);
+    expect(find.text('Archive Files (3)'), findsOneWidget);
+    expect(find.text('Overview & Stats'), findsOneWidget);
+    expect(find.text('Central Directory Audit'), findsOneWidget);
+    expect(find.text('notes.txt'), findsWidgets);
+
+    // Switch to Overview tab
+    await tester.tap(find.text('Overview & Stats'));
+    await tester.pumpAndSettle();
+    expect(find.text('Archive Summary & Storage Metrics'), findsOneWidget);
+    expect(find.text('Contained File Types Breakdown'), findsOneWidget);
+
+    // Switch to Central Directory Audit tab
+    await tester.tap(find.text('Central Directory Audit'));
+    await tester.pumpAndSettle();
+    expect(find.text('ZIP Central Directory & Local Headers Audit'), findsOneWidget);
+  });
+
+  testWidgets('ZIP entry with PDF invokes PdfDocumentPreview engine inside preview drawer',
+      (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 1; // Inspector tab
+
+    const samplePdfString =
+        '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page >>\nendobj\n%%EOF';
+    final samplePdfBytes = Uint8List.fromList(samplePdfString.codeUnits);
+
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'archive.zip',
+      fileSize: 4096,
+      headerBytes: Uint8List(288),
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: false,
+      hasPdfStream: false,
+      hasZipEocd: true,
+      detectedFormats: ['.zip'],
+      extractedZipBytes: samplePdfBytes,
+      zipEntries: const [
+        ZipEntryInfo(
+          name: 'report.pdf',
+          size: 150,
+          compressedSize: 100,
+          crc32: 0x99887766,
+          compressionMethod: 'Deflated',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(ZipArchivePreview), findsOneWidget);
+    expect(find.text('report.pdf'), findsWidgets);
+  });
+
+  testWidgets('ZIP entry with HTML renders in-app with CSS styles', (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 1; // Inspector tab
+
+    const sampleHtmlString = '<html><head><style>body{background:#112233;color:#ffffff;}</style></head><body><h1>Hello ZIP HTML</h1></body></html>';
+    final sampleHtmlBytes = Uint8List.fromList(sampleHtmlString.codeUnits);
+
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'web_bundle.zip',
+      fileSize: 4096,
+      headerBytes: Uint8List(288),
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: false,
+      hasPdfStream: false,
+      hasZipEocd: true,
+      detectedFormats: ['.zip'],
+      extractedZipBytes: sampleHtmlBytes,
+      zipEntries: const [
+        ZipEntryInfo(
+          name: 'index.html',
+          size: 150,
+          compressedSize: 100,
+          crc32: 0x12345678,
+          compressionMethod: 'Deflated',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(ZipArchivePreview), findsOneWidget);
+    expect(find.text('index.html'), findsWidgets);
   });
 }
