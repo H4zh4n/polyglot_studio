@@ -43,6 +43,22 @@ dynamically changes its behavior to match the native application opening it:
 
 ---
 
+## 📸 Screenshots
+
+### 🖥️ Desktop View
+
+|                             Polyglot Studio Workbench                              |                             Binary & Payload Inspector                             |
+|:----------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------:|
+| <img src="https://i.imgur.com/1hHcvrE.png" width="100%" alt="Desktop Workbench" /> | <img src="https://i.imgur.com/EU3bLLL.png" width="100%" alt="Desktop Inspector" /> |
+
+### 📱 Mobile View
+
+|                              Mobile Studio Workbench                              |                              Mobile Binary Inspector                              |
+|:---------------------------------------------------------------------------------:|:---------------------------------------------------------------------------------:|
+| <img src="https://i.imgur.com/ykmYP7P.png" height="420" alt="Mobile Workbench" /> | <img src="https://i.imgur.com/zyILjy4.png" height="420" alt="Mobile Inspector" /> |
+
+---
+
 ## ✨ Features
 
 ### ⚡ 1. Polyglot Studio (Workbench & Generator)
