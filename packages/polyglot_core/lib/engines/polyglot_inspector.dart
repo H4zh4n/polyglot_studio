@@ -127,6 +127,45 @@ class HtmlMetadataInfo {
   });
 }
 
+/// Detailed metadata and structural breakdown of PDF documents.
+class PdfMetadataInfo {
+  final String? version;
+  final int pageCount;
+  final String? title;
+  final String? author;
+  final String? creator;
+  final String? producer;
+  final String? creationDate;
+  final String? modDate;
+  final bool isEncrypted;
+  final bool isLinearized;
+  final int objectCount;
+  final int fontCount;
+  final int imageCount;
+  final int linkCount;
+  final int byteOffset;
+  final int byteSize;
+
+  const PdfMetadataInfo({
+    this.version,
+    this.pageCount = 0,
+    this.title,
+    this.author,
+    this.creator,
+    this.producer,
+    this.creationDate,
+    this.modDate,
+    this.isEncrypted = false,
+    this.isLinearized = false,
+    this.objectCount = 0,
+    this.fontCount = 0,
+    this.imageCount = 0,
+    this.linkCount = 0,
+    this.byteOffset = 0,
+    this.byteSize = 0,
+  });
+}
+
 /// Analysis result produced by inspecting a polyglot file header and byte map.
 class PolyglotInspectionResult {
   final String fileName;
@@ -158,6 +197,7 @@ class PolyglotInspectionResult {
   final Uint8List? extractedPdfBytes;
   final String? pdfVersion;
   final int pdfPageCount;
+  final PdfMetadataInfo pdfInfo;
   final MediaMetadataInfo mediaInfo;
 
   PolyglotInspectionResult({
@@ -189,6 +229,7 @@ class PolyglotInspectionResult {
     this.extractedPdfBytes,
     this.pdfVersion,
     this.pdfPageCount = 0,
+    this.pdfInfo = const PdfMetadataInfo(),
     this.mediaInfo = const MediaMetadataInfo(),
   });
 }
@@ -480,6 +521,7 @@ class PolyglotInspector {
     Uint8List? extractedPdfBytes;
     String? pdfVersion;
     int pdfPageCount = 0;
+    PdfMetadataInfo pdfInfo = const PdfMetadataInfo();
 
     if (sampleString.contains('%PDF-') || sampleString.contains('1 0 obj')) {
       hasPdf = true;
@@ -499,6 +541,12 @@ class PolyglotInspector {
           extractedPdfBytes = bytes.sublist(idx, idx + eofIdx + 5);
         } else {
           extractedPdfBytes = bytes.sublist(idx);
+        }
+
+        if (extractedPdfBytes.isNotEmpty) {
+          pdfInfo = _analyzePdf(extractedPdfBytes, pdfOffset);
+          pdfVersion = pdfInfo.version;
+          pdfPageCount = pdfInfo.pageCount;
         }
       }
     }
@@ -764,6 +812,7 @@ class PolyglotInspector {
       extractedPdfBytes: extractedPdfBytes,
       pdfVersion: pdfVersion,
       pdfPageCount: pdfPageCount,
+      pdfInfo: pdfInfo,
       mediaInfo: MediaMetadataInfo(
         width: videoWidth,
         height: videoHeight,
@@ -773,6 +822,72 @@ class PolyglotInspector {
         atomBoxes: atomBoxes,
         isVideo: isVideoMedia,
       ),
+    );
+  }
+
+  static PdfMetadataInfo _analyzePdf(Uint8List pdfBytes, int? offset) {
+    if (pdfBytes.isEmpty) return const PdfMetadataInfo();
+    final latin1String = String.fromCharCodes(pdfBytes);
+
+    final verMatch = RegExp(r'%PDF-(\d+\.\d+)').firstMatch(latin1String);
+    final version = verMatch?.group(1) ?? '1.4';
+
+    // Page count
+    int pageCount = RegExp(r'/Type\s*/Page\b').allMatches(latin1String).length;
+    if (pageCount == 0 && latin1String.contains('/Page')) pageCount = 1;
+
+    // Metadata dictionary
+    String? title;
+    String? author;
+    String? creator;
+    String? producer;
+    String? creationDate;
+    String? modDate;
+
+    final titleMatch = RegExp(r'/Title\s*\(([^)]+)\)').firstMatch(latin1String);
+    if (titleMatch != null) title = titleMatch.group(1);
+
+    final authorMatch = RegExp(r'/Author\s*\(([^)]+)\)').firstMatch(latin1String);
+    if (authorMatch != null) author = authorMatch.group(1);
+
+    final creatorMatch = RegExp(r'/Creator\s*\(([^)]+)\)').firstMatch(latin1String);
+    if (creatorMatch != null) creator = creatorMatch.group(1);
+
+    final producerMatch = RegExp(r'/Producer\s*\(([^)]+)\)').firstMatch(latin1String);
+    if (producerMatch != null) producer = producerMatch.group(1);
+
+    final creationMatch = RegExp(r'/CreationDate\s*\(([^)]+)\)').firstMatch(latin1String);
+    if (creationMatch != null) creationDate = creationMatch.group(1);
+
+    final modMatch = RegExp(r'/ModDate\s*\(([^)]+)\)').firstMatch(latin1String);
+    if (modMatch != null) modDate = modMatch.group(1);
+
+    final isEncrypted = latin1String.contains('/Encrypt');
+    final isLinearized = latin1String.contains('/Linearized');
+
+    // Structural object metrics
+    final objectCount = RegExp(r'\b\d+\s+\d+\s+obj\b').allMatches(latin1String).length;
+    final fontCount = RegExp(r'/Type\s*/Font\b').allMatches(latin1String).length;
+    final imageCount = RegExp(r'/Subtype\s*/Image\b').allMatches(latin1String).length;
+    final linkCount = RegExp(r'/Subtype\s*/Link\b|/URI\b').allMatches(latin1String).length;
+
+    return PdfMetadataInfo(
+      version: version,
+      pageCount: pageCount,
+      title: title,
+      author: author,
+      creator: creator,
+      producer: producer,
+      creationDate: creationDate,
+      modDate: modDate,
+      isEncrypted: isEncrypted,
+      isLinearized: isLinearized,
+      objectCount: objectCount,
+      fontCount: fontCount,
+      imageCount: imageCount,
+      linkCount: linkCount,
+      byteOffset: offset ?? 0,
+      byteSize: pdfBytes.length,
     );
   }
 

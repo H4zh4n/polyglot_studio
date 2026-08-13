@@ -9,6 +9,7 @@ import '../../utils/number_utils.dart';
 import 'widgets/audio_player_preview.dart';
 import 'widgets/html_document_preview.dart';
 import 'widgets/image_preview_dialog.dart';
+import 'widgets/pdf_document_preview.dart';
 import 'widgets/video_player_preview.dart';
 
 class _InspectorTabItem {
@@ -864,49 +865,11 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
   }
 
   Widget _buildPdfPreview(PolyglotInspectionResult res) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderSubtle),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.picture_as_pdf, size: 14, color: AppTheme.accent),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: Text(
-                  'Encapsulated PDF Document Stream',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (res.extractedPdfBytes != null) ...[
-                const SizedBox(width: 6),
-                Text(
-                  NumberUtils.formatSizeKb(res.extractedPdfBytes!.length),
-                  style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textMuted),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _buildInfoBadge('Spec Version', 'PDF v${res.pdfVersion ?? '1.4'}'),
-              _buildInfoBadge('Page Objects', '${res.pdfPageCount > 0 ? res.pdfPageCount : 1} Page'),
-              _buildInfoBadge('Stream Offset', 'Byte ${NumberUtils.formatInt(res.pdfOffset ?? 0)}'),
-              _buildInfoBadge('Shifted XREF', 'Dual-Table Verified'),
-            ],
-          ),
-        ],
-      ),
+    final pdfBytes = res.extractedPdfBytes ?? res.rawBytes ?? res.headerBytes;
+    return PdfDocumentPreview(
+      pdfBytes: pdfBytes,
+      fileName: res.fileName,
+      pdfInfo: res.pdfInfo,
     );
   }
 

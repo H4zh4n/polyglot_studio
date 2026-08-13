@@ -10,6 +10,7 @@ import 'package:polyglot/main.dart';
 import 'package:polyglot/models/app_file.dart';
 import 'package:polyglot/views/inspector/widgets/audio_player_preview.dart';
 import 'package:polyglot/views/inspector/widgets/html_document_preview.dart';
+import 'package:polyglot/views/inspector/widgets/pdf_document_preview.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 
 void main() {
@@ -389,6 +390,67 @@ void main() {
     // Toggle In-App Render
     await tester.tap(find.text('Render in App'));
     await tester.pumpAndSettle();
-    expect(find.text('CSS3 Stylesheet Engine Active'), findsOneWidget);
+    expect(find.text('CSS3 Engine Active'), findsOneWidget);
+  });
+
+  testWidgets('PDF format in inspector displays PdfDocumentPreview with navigation and tabs', (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 1; // Inspector tab
+
+    const samplePdfString = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page >>\nendobj\n%%EOF';
+    final samplePdfBytes = Uint8List.fromList(samplePdfString.codeUnits);
+
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'document.pdf',
+      fileSize: samplePdfBytes.length,
+      headerBytes: samplePdfBytes,
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: false,
+      hasPdfStream: true,
+      hasZipEocd: false,
+      detectedFormats: ['.pdf'],
+      extractedPdfBytes: samplePdfBytes,
+      pdfVersion: '1.4',
+      pdfPageCount: 1,
+      pdfInfo: const PdfMetadataInfo(
+        version: '1.4',
+        pageCount: 1,
+        title: 'Secret Document',
+        author: 'Polyglot Agent',
+        objectCount: 3,
+        byteSize: 128,
+      ),
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Verify PDF Document Preview is rendered
+    expect(find.byType(PdfDocumentPreview), findsOneWidget);
+    expect(find.text('Secret Document'), findsWidgets);
+    expect(find.text('Open in Viewer'), findsOneWidget);
+    expect(find.text('Document Pages'), findsOneWidget);
+    expect(find.text('Overview & Specs'), findsOneWidget);
+    expect(find.text('Object Streams (3)'), findsOneWidget);
+
+    // Switch to Overview tab
+    await tester.tap(find.text('Overview & Specs'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('PDF Document Specifications'), findsOneWidget);
+    expect(find.text('Polyglot Agent'), findsOneWidget);
+
+    // Switch to Object Streams tab
+    await tester.tap(find.text('Object Streams (3)'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('PDF Object Architecture & XREF Table'), findsOneWidget);
   });
 }

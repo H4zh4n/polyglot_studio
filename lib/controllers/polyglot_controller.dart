@@ -469,6 +469,41 @@ class PolyglotController extends GetxController {
     }
   }
 
+  // Extract detected PDF content to a file
+  Future<void> extractPdfFile() async {
+    final res = inspectionResult.value;
+    if (res == null || res.extractedPdfBytes == null) return;
+
+    final baseName = p.basenameWithoutExtension(res.fileName);
+    final defaultName = '${baseName}_extracted.pdf';
+    final bytesToSave = res.extractedPdfBytes!;
+
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Extracted PDF to Disk',
+      fileName: defaultName,
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      bytes: bytesToSave,
+    );
+
+    if (kIsWeb) {
+      Notify.success(
+        'PDF Downloaded',
+        description: 'Downloaded $defaultName (${NumberUtils.formatBytesExact(bytesToSave.length)})',
+      );
+      return;
+    }
+
+    if (savePath != null) {
+      final file = File(savePath);
+      await file.writeAsBytes(bytesToSave);
+      Notify.success(
+        'PDF Extracted',
+        description: 'Saved PDF (${NumberUtils.formatBytesExact(bytesToSave.length)}) to $savePath',
+      );
+    }
+  }
+
   void clearInspection() {
     inspectionResult.value = null;
   }

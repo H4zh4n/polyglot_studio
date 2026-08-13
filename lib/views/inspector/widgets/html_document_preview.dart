@@ -587,7 +587,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
             ),
             const SizedBox(height: 6),
             Container(
-              constraints: const BoxConstraints(maxHeight: 140),
+              constraints: const BoxConstraints(maxHeight: 200),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppTheme.surfaceElevated,
@@ -687,8 +687,12 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
       padding: const EdgeInsets.all(10),
       child: Column(
         children: [
-          // Toolbar: Render In-App Toggle, Search, Matches, Wrap & Copy
-          Row(
+          // Responsive Toolbar: Render In-App Toggle, Search, Matches, Wrap & Copy
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 6,
             children: [
               // In-App Render / Source Toggle Button
               Container(
@@ -698,6 +702,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
                   border: Border.all(color: AppTheme.borderSubtle),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     InkWell(
                       onTap: () => setState(() => _renderInApp = false),
@@ -755,102 +760,115 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
                 ),
               ),
 
-              const SizedBox(width: 8),
-
               if (!_renderInApp) ...[
-                Expanded(
-                  child: Container(
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceElevated,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: AppTheme.borderSubtle),
-                    ),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                      style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        hintText: 'Search in source...',
-                        hintStyle: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted),
-                        prefixIcon: const Icon(Icons.search, size: 13, color: AppTheme.textMuted),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 12, color: AppTheme.textMuted),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() => _searchQuery = '');
-                                },
-                              )
-                            : null,
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    SizedBox(
+                      width: 150,
+                      height: 28,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceElevated,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: AppTheme.borderSubtle),
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                          style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppTheme.textPrimary),
+                          decoration: InputDecoration(
+                            hintText: 'Search...',
+                            hintStyle: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted),
+                            prefixIcon: const Icon(Icons.search, size: 13, color: AppTheme.textMuted),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 12, color: AppTheme.textMuted),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                if (_searchQuery.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(25) : AppTheme.danger.withAlpha(20),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(80) : AppTheme.danger.withAlpha(80),
+                    if (_searchQuery.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(25) : AppTheme.danger.withAlpha(20),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: searchMatchCount > 0 ? AppTheme.primary.withAlpha(80) : AppTheme.danger.withAlpha(80),
+                          ),
+                        ),
+                        child: Text(
+                          '$searchMatchCount match${searchMatchCount == 1 ? '' : 'es'}',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                            color: searchMatchCount > 0 ? AppTheme.primary : AppTheme.danger,
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      '$searchMatchCount match${searchMatchCount == 1 ? '' : 'es'}',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.bold,
-                        color: searchMatchCount > 0 ? AppTheme.primary : AppTheme.danger,
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: _wrapLines ? 'Disable Line Wrap' : 'Enable Line Wrap',
+                      icon: Icon(
+                        _wrapLines ? Icons.wrap_text_rounded : Icons.format_align_left_rounded,
+                        size: 15,
+                        color: _wrapLines ? AppTheme.primary : AppTheme.textMuted,
                       ),
+                      onPressed: () => setState(() => _wrapLines = !_wrapLines),
                     ),
-                  ),
-                ],
-                const SizedBox(width: 6),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  tooltip: _wrapLines ? 'Disable Line Wrap' : 'Enable Line Wrap',
-                  icon: Icon(
-                    _wrapLines ? Icons.wrap_text_rounded : Icons.format_align_left_rounded,
-                    size: 15,
-                    color: _wrapLines ? AppTheme.primary : AppTheme.textMuted,
-                  ),
-                  onPressed: () => setState(() => _wrapLines = !_wrapLines),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Copy Source Code',
+                      icon: const Icon(Icons.copy, size: 14, color: AppTheme.textSecondary),
+                      onPressed: _copyToClipboard,
+                    ),
+                  ],
                 ),
               ] else ...[
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: (bodyBgColor ?? AppTheme.accent).withAlpha(25),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: (bodyBgColor ?? AppTheme.accent).withAlpha(80)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.palette_outlined, size: 11, color: bodyBgColor ?? AppTheme.accent),
-                      const SizedBox(width: 4),
-                      Text(
-                        bodyBgColor != null ? 'CSS Background Applied' : 'CSS3 Stylesheet Engine Active',
-                        style: TextStyle(fontSize: 9.5, color: bodyBgColor ?? AppTheme.accent, fontWeight: FontWeight.bold),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: (bodyBgColor ?? AppTheme.accent).withAlpha(25),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: (bodyBgColor ?? AppTheme.accent).withAlpha(80)),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.palette_outlined, size: 11, color: bodyBgColor ?? AppTheme.accent),
+                          const SizedBox(width: 4),
+                          Text(
+                            bodyBgColor != null ? 'CSS Background Applied' : 'CSS3 Engine Active',
+                            style: TextStyle(fontSize: 9.5, color: bodyBgColor ?? AppTheme.accent, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Copy Source Code',
+                      icon: const Icon(Icons.copy, size: 14, color: AppTheme.textSecondary),
+                      onPressed: _copyToClipboard,
+                    ),
+                  ],
                 ),
               ],
-
-              const SizedBox(width: 6),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: 'Copy Source Code',
-                icon: const Icon(Icons.copy, size: 14, color: AppTheme.textSecondary),
-                onPressed: _copyToClipboard,
-              ),
             ],
           ),
 
@@ -858,7 +876,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
 
           // Container: Switch between In-App Rendered View or Syntax-Highlighted Source Code
           Container(
-            height: 250,
+            height: 400,
             width: double.infinity,
             decoration: BoxDecoration(
               color: _renderInApp ? (bodyBgColor ?? const Color(0xFF0D0F12)) : const Color(0xFF090B0E),
