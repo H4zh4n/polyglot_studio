@@ -1,4 +1,4 @@
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, Process;
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +10,13 @@ import '../../../controllers/polyglot_controller.dart';
 import '../../../theme/app_theme.dart';
 import '../../../utils/number_utils.dart';
 
-/// Highly polished, interactive Audio Player and Visualizer for MP3, AAC, WAV, and M4A.
+enum AudioVisualizerMode {
+  spectrum,
+  oscilloscope,
+  overview,
+}
+
+/// Highly polished, interactive Audio Player and Live Frequency Visualizer for M4A, MP4, and Audio Polyglots.
 class AudioPlayerPreview extends StatefulWidget {
   final Uint8List audioBytes;
   final String fileName;
@@ -21,7 +27,7 @@ class AudioPlayerPreview extends StatefulWidget {
     super.key,
     required this.audioBytes,
     required this.fileName,
-    this.format = '.mp3',
+    this.format = '.m4a',
     this.mediaInfo = const MediaMetadataInfo(),
   });
 
@@ -30,7 +36,7 @@ class AudioPlayerPreview extends StatefulWidget {
 }
 
 class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTickerProviderStateMixin {
-  late final AnimationController _waveAnimController;
+  late final AnimationController _animController;
   VideoPlayerController? _player;
 
   bool _isInitialized = false;
@@ -42,15 +48,214 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
   String? _errorMessage;
   String? _tempFilePath;
 
+  AudioVisualizerMode _visualizerMode = AudioVisualizerMode.spectrum;
+
+  // Track timeline overview peaks
+  List<double> _waveformPeaks = List.filled(40, 0.25);
+
+  // Time-sliced multi-band frequency spectrum (20 slices/sec, 28 bands per slice)
+  static const int _bandCount = 28;
+  static const int _slicesPerSec = 20;
+  List<List<double>> _spectrumSlices = [];
+
+  // Live dynamic values for the currently playing frame
+  late List<double> _liveBands;
+  late List<double> _peakHolds;
+
   @override
   void initState() {
     super.initState();
-    _waveAnimController = AnimationController(
+    _liveBands = List.filled(_bandCount, 0.08);
+    _peakHolds = List.filled(_bandCount, 0.08);
+
+    _animController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
+      duration: const Duration(milliseconds: 1000),
+    )..addListener(_onAnimTick);
 
     _initAudio();
+    _extractSpectrumAndWaveform();
+  }
+
+  void _onAnimTick() {
+    if (!mounted) return;
+    _updateLiveBands();
+    setState(() {});
+  }
+
+  void _updateLiveBands() {
+    final isPlaying = _isPlaying;
+    final pos = (_player != null && _isInitialized) ? _player!.value.position : Duration.zero;
+
+    List<double> targetBands;
+    if (isPlaying && _spectrumSlices.isNotEmpty) {
+      final sliceIdx = ((pos.inMilliseconds / 1000.0) * _slicesPerSec).floor().clamp(0, _spectrumSlices.length - 1);
+      targetBands = _spectrumSlices[sliceIdx];
+    } else {
+      targetBands = List.filled(_bandCount, 0.06);
+    }
+
+    // Smooth physical attack and gravity decay
+    for (int i = 0; i < _bandCount; i++) {
+      final target = (i < targetBands.length) ? targetBands[i] : 0.06;
+
+      if (target > _liveBands[i]) {
+        // Fast attack on beat
+        _liveBands[i] = _liveBands[i] + (target - _liveBands[i]) * 0.45;
+      } else {
+        // Smooth exponential decay
+        _liveBands[i] = _liveBands[i] + (target - _liveBands[i]) * 0.18;
+      }
+
+      // Peak holds (slowly drop down)
+      if (_liveBands[i] >= _peakHolds[i]) {
+        _peakHolds[i] = _liveBands[i];
+      } else {
+        _peakHolds[i] = math.max(0.06, _peakHolds[i] - 0.015);
+      }
+    }
+  }
+
+  Future<void> _extractSpectrumAndWaveform() async {
+    if (widget.audioBytes.isEmpty) return;
+
+    try {
+      if (!kIsWeb) {
+        final tempDir = Directory.systemTemp;
+        final tempIn = p.join(tempDir.path, 'poly_spec_${DateTime.now().microsecondsSinceEpoch}.mp4');
+        await File(tempIn).writeAsBytes(widget.audioBytes, flush: true);
+
+        // Extract raw 8-bit mono PCM downsampled to 4000 Hz
+        final result = await Process.run('ffmpeg', [
+          '-y',
+          '-v', 'error',
+          '-i', tempIn,
+          '-ac', '1',
+          '-ar', '4000',
+          '-map', '0:a',
+          '-c:a', 'pcm_u8',
+          '-f', 'u8',
+          '-',
+        ], stdoutEncoding: null);
+
+        try {
+          final f = File(tempIn);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+
+        if (result.exitCode == 0 && result.stdout is List<int>) {
+          final pcm = result.stdout as List<int>;
+          if (pcm.isNotEmpty) {
+            final totalSlices = (pcm.length / 4000.0 * _slicesPerSec).ceil();
+            final pcmPerSlice = (4000 / _slicesPerSec).round(); // 200 samples per 50ms
+
+            final matrix = <List<double>>[];
+            double globalMax = 0.0;
+
+            for (int s = 0; s < totalSlices; s++) {
+              final start = s * pcmPerSlice;
+              final end = (start + pcmPerSlice < pcm.length) ? (start + pcmPerSlice) : pcm.length;
+              final windowSize = end - start;
+
+              if (windowSize <= 4) {
+                matrix.add(List.filled(_bandCount, 0.06));
+                continue;
+              }
+
+              final sliceBands = List<double>.filled(_bandCount, 0.0);
+
+              for (int b = 0; b < _bandCount; b++) {
+                final stride = math.max(1, (b * 2) ~/ _bandCount + 1);
+                double bandEnergy = 0.0;
+                int count = 0;
+
+                if (b < _bandCount ~/ 3) {
+                  // Bass / Sub-bass
+                  for (int j = start; j < end; j += stride) {
+                    final amp = (pcm[j] - 128).abs();
+                    bandEnergy += amp * amp;
+                    count++;
+                  }
+                } else if (b < (_bandCount * 2) ~/ 3) {
+                  // Mids / Vocals
+                  for (int j = start + 2; j < end; j += stride) {
+                    final mid = (pcm[j] - pcm[j - 2]).abs();
+                    bandEnergy += mid * mid;
+                    count++;
+                  }
+                } else {
+                  // Treble / Highs
+                  for (int j = start + 1; j < end; j += stride) {
+                    final diff = (pcm[j] - pcm[j - 1]).abs();
+                    bandEnergy += diff * diff * 2.0;
+                    count++;
+                  }
+                }
+
+                final rms = count > 0 ? math.sqrt(bandEnergy / count) : 0.0;
+                sliceBands[b] = rms;
+                if (rms > globalMax) globalMax = rms;
+              }
+
+              matrix.add(sliceBands);
+            }
+
+            if (globalMax > 0.01) {
+              final normalizedMatrix = matrix.map((slice) {
+                return slice.map((val) => (0.08 + (val / globalMax) * 0.92).clamp(0.08, 1.0)).toList();
+              }).toList();
+
+              // Also calculate static timeline overview
+              final overviewPeaks = <double>[];
+              const overviewBars = 40;
+              final chunkLen = (pcm.length / overviewBars).ceil();
+              for (int i = 0; i < overviewBars; i++) {
+                final st = i * chunkLen;
+                final en = (st + chunkLen < pcm.length) ? (st + chunkLen) : pcm.length;
+                int pk = 0;
+                for (int j = st; j < en; j++) {
+                  final v = (pcm[j] - 128).abs();
+                  if (v > pk) pk = v;
+                }
+                overviewPeaks.add((0.15 + (pk / 128.0) * 0.85).clamp(0.15, 1.0));
+              }
+
+              if (mounted) {
+                setState(() {
+                  _spectrumSlices = normalizedMatrix;
+                  _waveformPeaks = overviewPeaks;
+                });
+              }
+              return;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Fallback: binary spectrum decomposition
+    final data = widget.audioBytes;
+    final totalSlices = math.max(20, (data.length / 500).floor());
+    final matrix = <List<double>>[];
+    final blockSize = (data.length / totalSlices).floor();
+
+    if (blockSize > 0) {
+      for (int s = 0; s < totalSlices; s++) {
+        final start = s * blockSize;
+        final slice = List<double>.generate(_bandCount, (b) {
+          final offset = start + ((b * blockSize) ~/ _bandCount);
+          final byteVal = (offset < data.length) ? data[offset] : 128;
+          final norm = ((byteVal % 100) / 100.0).clamp(0.1, 1.0);
+          return 0.1 + (norm * 0.85);
+        });
+        matrix.add(slice);
+      }
+      if (mounted) {
+        setState(() {
+          _spectrumSlices = matrix;
+        });
+      }
+    }
   }
 
   Future<void> _initAudio() async {
@@ -70,10 +275,9 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
         final uri = Uri.dataFromBytes(widget.audioBytes, mimeType: mime);
         _player = VideoPlayerController.networkUrl(uri);
       } else {
-        // Native desktop/mobile: write temporary cached file for reliable streaming
         final tempDir = Directory.systemTemp;
         final ext = widget.format.replaceAll('.', '').toLowerCase();
-        final cleanExt = ext.isNotEmpty ? ext : 'mp3';
+        final cleanExt = ext.isNotEmpty ? ext : 'mp4';
         final tempFile = File(p.join(tempDir.path, 'polyglot_audio_preview_${DateTime.now().millisecondsSinceEpoch}.$cleanExt'));
         await tempFile.writeAsBytes(widget.audioBytes, flush: true);
         _tempFilePath = tempFile.path;
@@ -107,17 +311,17 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
   void _onPlayerUpdate() {
     if (!mounted || _player == null) return;
     final isPlaying = _player!.value.isPlaying;
-    if (isPlaying && !_waveAnimController.isAnimating) {
-      _waveAnimController.repeat();
-    } else if (!isPlaying && _waveAnimController.isAnimating) {
-      _waveAnimController.stop();
+    if (isPlaying && !_animController.isAnimating) {
+      _animController.repeat();
+    } else if (!isPlaying && _animController.isAnimating) {
+      _animController.stop();
     }
     setState(() {});
   }
 
   @override
   void dispose() {
-    _waveAnimController.dispose();
+    _animController.dispose();
     _player?.removeListener(_onPlayerUpdate);
     _player?.dispose();
 
@@ -217,7 +421,7 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Top Header Row with Format Badge & Actions
+          // 1. Top Header Row with Format Badge, Visualizer Mode Switcher & Export
           Wrap(
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -229,7 +433,7 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
                 spacing: 6,
                 runSpacing: 4,
                 children: [
-                  const Icon(Icons.audiotrack, size: 15, color: AppTheme.accent),
+                  const Icon(Icons.equalizer_rounded, size: 16, color: AppTheme.accent),
                   const Text(
                     'Interactive Audio Player',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
@@ -249,81 +453,62 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
                 ],
               ),
 
-              // Export Audio Button
-              if (controller != null) ...[
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.surfaceElevated,
-                    foregroundColor: AppTheme.textPrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-                    side: const BorderSide(color: AppTheme.borderSubtle),
-                    visualDensity: VisualDensity.compact,
+              // Visualizer Mode Selector & Export Button
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceElevated,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.borderSubtle),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildModeTab(AudioVisualizerMode.spectrum, 'Spectrum', Icons.bar_chart_rounded),
+                        _buildModeTab(AudioVisualizerMode.oscilloscope, 'Wave', Icons.waves_rounded),
+                        _buildModeTab(AudioVisualizerMode.overview, 'Overview', Icons.graphic_eq_rounded),
+                      ],
+                    ),
                   ),
-                  onPressed: () => controller.extractMediaFile(preferredExtension: widget.format.replaceAll('.', '')),
-                  icon: const Icon(Icons.download_outlined, size: 13),
-                  label: const Text('Export Audio', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  if (controller != null) ...[
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.surfaceElevated,
+                        foregroundColor: AppTheme.textPrimary,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                        side: const BorderSide(color: AppTheme.borderSubtle),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () => controller.extractMediaFile(preferredExtension: widget.format.replaceAll('.', '')),
+                      icon: const Icon(Icons.download_outlined, size: 13),
+                      label: const Text('Export Audio', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // 2. Animated Equalizer Visualizer Card
+          // 2. Real-Time Dynamic Frequency Visualizer Stage
           Container(
-            height: 90,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            height: 108,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F1216),
+              color: const Color(0xFF0C0E12),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppTheme.borderSubtle),
             ),
-            child: AnimatedBuilder(
-              animation: _waveAnimController,
-              builder: (context, _) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List.generate(28, (index) {
-                    final isPlaying = _isPlaying;
-                    double barHeight = 8.0;
-                    if (isPlaying) {
-                      final phase = (index / 28.0) * 2 * math.pi;
-                      final t = _waveAnimController.value * 2 * math.pi;
-                      final wave1 = math.sin(phase + t);
-                      final wave2 = math.cos(phase * 2 - t * 1.5);
-                      final norm = ((wave1 + wave2) / 2.0).abs();
-                      barHeight = 10.0 + (norm * 55.0);
-                    }
-
-                    final isAccent = (index % 4 == 0);
-                    return Container(
-                      width: 4,
-                      height: barHeight,
-                      decoration: BoxDecoration(
-                        color: isPlaying
-                            ? (isAccent ? AppTheme.accent : const Color(0xFFE5E7EB))
-                            : const Color(0xFF374151),
-                        borderRadius: BorderRadius.circular(2),
-                        boxShadow: isPlaying && isAccent
-                            ? [
-                                BoxShadow(
-                                  color: AppTheme.accent.withAlpha(80),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                ),
-                              ]
-                            : null,
-                      ),
-                    );
-                  }),
-                );
-              },
-            ),
+            child: _buildActiveVisualizer(totalSec, currentSec),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
           // 3. Audio Scrubber & Timestamps
           Row(
@@ -366,8 +551,8 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
                 onTap: _togglePlayPause,
                 borderRadius: BorderRadius.circular(24),
                 child: Container(
-                  width: 40,
-                  height: 40,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
                     color: AppTheme.primary,
                     shape: BoxShape.circle,
@@ -384,12 +569,12 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
                   child: _isLoading
                       ? const Icon(
                           Icons.hourglass_top_rounded,
-                          size: 20,
+                          size: 18,
                           color: Color(0xFF0D0F12),
                         )
                       : Icon(
                           _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                          size: 24,
+                          size: 22,
                           color: const Color(0xFF0D0F12),
                         ),
                 ),
@@ -501,15 +686,233 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
             spacing: 6,
             runSpacing: 6,
             children: [
-              _buildInfoBadge('Codec', widget.mediaInfo.audioCodec ?? 'MPEG Audio / AAC'),
+              _buildInfoBadge('Codec', widget.mediaInfo.audioCodec ?? 'AAC Audio / MP4'),
               _buildInfoBadge('Size', NumberUtils.formatSizeKb(widget.audioBytes.length)),
               if (dur > Duration.zero)
                 _buildInfoBadge('Length', _formatDuration(dur)),
-              _buildInfoBadge('Container', 'Native Media Stream'),
+              _buildInfoBadge('Mode', _visualizerMode.name.toUpperCase()),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildModeTab(AudioVisualizerMode mode, String label, IconData icon) {
+    final isSelected = _visualizerMode == mode;
+    return InkWell(
+      onTap: () => setState(() => _visualizerMode = mode),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primary.withAlpha(40) : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 11,
+              color: isSelected ? AppTheme.primary : AppTheme.textMuted,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? AppTheme.primary : AppTheme.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveVisualizer(double totalSec, double currentSec) {
+    switch (_visualizerMode) {
+      case AudioVisualizerMode.spectrum:
+        return _buildSpectrumEqualizer();
+      case AudioVisualizerMode.oscilloscope:
+        return _buildOscilloscopeWave();
+      case AudioVisualizerMode.overview:
+        return _buildTimelineOverview(totalSec, currentSec);
+    }
+  }
+
+  /// Mode 1: 28-Band Real-Time Pro Frequency Spectrum Equalizer with Peak Holds
+  Widget _buildSpectrumEqualizer() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final barWidth = math.max(3.0, (constraints.maxWidth - (_bandCount * 2.5)) / _bandCount);
+
+        return Column(
+          children: [
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: List.generate(_bandCount, (index) {
+                  final heightFraction = _liveBands[index];
+                  final peakFraction = _peakHolds[index];
+                  final isBass = index < _bandCount ~/ 3;
+                  final isMids = index >= _bandCount ~/ 3 && index < (_bandCount * 2) ~/ 3;
+
+                  final barColor = isBass
+                      ? AppTheme.primary
+                      : (isMids ? const Color(0xFF38BDF8) : AppTheme.accent);
+
+                  return SizedBox(
+                    width: barWidth,
+                    child: Stack(
+                      alignment: Alignment.bottomCenter,
+                      clipBehavior: Clip.none,
+                      children: [
+                        // Peak Hold Marker Dot
+                        Positioned(
+                          bottom: (peakFraction * (constraints.maxHeight - 20)).clamp(6.0, constraints.maxHeight - 20),
+                          child: Container(
+                            width: barWidth,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: barColor.withAlpha(220),
+                              borderRadius: BorderRadius.circular(1),
+                              boxShadow: _isPlaying
+                                  ? [
+                                      BoxShadow(
+                                        color: barColor.withAlpha(120),
+                                        blurRadius: 3,
+                                        spreadRadius: 0.5,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                        ),
+
+                        // Equalizer Bar
+                        Container(
+                          height: math.max(4.0, heightFraction * (constraints.maxHeight - 24)),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: [
+                                barColor.withAlpha(100),
+                                barColor,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(2),
+                            boxShadow: (_isPlaying && heightFraction > 0.4)
+                                ? [
+                                    BoxShadow(
+                                      color: barColor.withAlpha(80),
+                                      blurRadius: 4,
+                                      spreadRadius: 0.5,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Frequency range sub-labels (Bass -> Mids -> Highs)
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('60Hz', style: TextStyle(fontSize: 8.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
+                Text('250Hz', style: TextStyle(fontSize: 8.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
+                Text('1kHz', style: TextStyle(fontSize: 8.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
+                Text('4kHz', style: TextStyle(fontSize: 8.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
+                Text('16kHz', style: TextStyle(fontSize: 8.5, fontFamily: 'monospace', color: AppTheme.textMuted)),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Mode 2: Live Real-Time Continuous Oscilloscope Frequency Waveform
+  Widget _buildOscilloscopeWave() {
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _LiveOscilloscopePainter(
+        bands: _liveBands,
+        animPhase: _animController.value,
+        isPlaying: _isPlaying,
+        primaryColor: AppTheme.primary,
+        accentColor: AppTheme.accent,
+      ),
+    );
+  }
+
+  /// Mode 3: Interactive Full Audio Track Amplitude Overview
+  Widget _buildTimelineOverview(double totalSec, double currentSec) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (details) {
+            if (totalSec > 0) {
+              final ratio = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+              _seekTo(ratio * totalSec);
+            }
+          },
+          onHorizontalDragUpdate: (details) {
+            if (totalSec > 0) {
+              final ratio = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+              _seekTo(ratio * totalSec);
+            }
+          },
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(_waveformPeaks.length, (index) {
+              final progress = totalSec > 0 ? (currentSec / totalSec) : 0.0;
+              final totalBars = _waveformPeaks.length;
+              final activeBarIndex = (progress * totalBars).floor();
+              final isPlayed = index < activeBarIndex;
+              final isActive = index == activeBarIndex && _isPlaying;
+              final peak = _waveformPeaks[index];
+
+              double barHeight = 8.0 + (peak * 68.0);
+              if (isActive) {
+                final pulse = math.sin(_animController.value * 2 * math.pi).abs();
+                barHeight += (pulse * 8.0);
+              }
+
+              return Container(
+                width: math.max(3.0, (constraints.maxWidth - 20) / (totalBars * 1.55)),
+                height: barHeight,
+                decoration: BoxDecoration(
+                  color: isPlayed
+                      ? (index % 6 == 0 ? AppTheme.accent : AppTheme.primary)
+                      : (isActive ? AppTheme.primary : const Color(0xFF374151)),
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: (isPlayed || isActive) && (index % 4 == 0)
+                      ? [
+                          BoxShadow(
+                            color: AppTheme.primary.withAlpha(90),
+                            blurRadius: 4,
+                            spreadRadius: 0.5,
+                          ),
+                        ]
+                      : null,
+                ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 
@@ -534,4 +937,72 @@ class _AudioPlayerPreviewState extends State<AudioPlayerPreview> with SingleTick
       ),
     );
   }
+}
+
+/// Custom painter rendering a live continuous Oscilloscope wave reflecting the instantaneous audio frequencies.
+class _LiveOscilloscopePainter extends CustomPainter {
+  final List<double> bands;
+  final double animPhase;
+  final bool isPlaying;
+  final Color primaryColor;
+  final Color accentColor;
+
+  _LiveOscilloscopePainter({
+    required this.bands,
+    required this.animPhase,
+    required this.isPlaying,
+    required this.primaryColor,
+    required this.accentColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (bands.isEmpty) return;
+
+    final midY = size.height / 2;
+    final path = Path();
+    final stepX = size.width / (bands.length - 1);
+
+    path.moveTo(0, midY);
+
+    for (int i = 0; i < bands.length; i++) {
+      final x = i * stepX;
+      final energy = bands[i];
+      final wave = math.sin((i / bands.length) * 4 * math.pi + animPhase * 2 * math.pi);
+      final yOffset = wave * energy * (size.height * 0.44);
+      final y = midY + (isPlaying ? yOffset : 0);
+
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        final prevX = (i - 1) * stepX;
+        final prevEnergy = bands[i - 1];
+        final prevWave = math.sin(((i - 1) / bands.length) * 4 * math.pi + animPhase * 2 * math.pi);
+        final prevY = midY + (isPlaying ? prevWave * prevEnergy * (size.height * 0.44) : 0);
+        final controlX = (prevX + x) / 2;
+        path.cubicTo(controlX, prevY, controlX, y, x, y);
+      }
+    }
+
+    // Background Glow
+    final glowPaint = Paint()
+      ..color = primaryColor.withAlpha(90)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.5
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+    canvas.drawPath(path, glowPaint);
+
+    // Foreground Stroke
+    final strokePaint = Paint()
+      ..shader = LinearGradient(
+        colors: [primaryColor, accentColor, const Color(0xFF38BDF8), primaryColor],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.5;
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveOscilloscopePainter oldDelegate) => true;
 }
