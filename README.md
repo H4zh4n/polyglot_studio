@@ -49,7 +49,7 @@ dynamically changes its behavior to match the native application opening it:
 
 |                             Polyglot Studio Workbench                              |                             Binary & Payload Inspector                             |
 |:----------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------:|
-| <img src="https://i.imgur.com/1hHcvrE.png" width="100%" alt="Desktop Workbench" /> | <img src="https://i.imgur.com/EU3bLLL.png" width="100%" alt="Desktop Inspector" /> |
+| <img src="https://i.imgur.com/UizrYwZ.png" width="100%" alt="Desktop Workbench" /> | <img src="https://i.imgur.com/EU3bLLL.png" width="100%" alt="Desktop Inspector" /> |
 
 ### 📱 Mobile View
 
