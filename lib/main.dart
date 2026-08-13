@@ -5,6 +5,7 @@ import 'package:device_preview_screenshot/device_preview_screenshot.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:toastification/toastification.dart';
 import 'package:video_player_win/video_player_win.dart';
 
 import 'controllers/polyglot_controller.dart';
@@ -52,16 +53,17 @@ class PolyglotApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
-      title: 'Polyglot Studio',
-      debugShowCheckedModeBanner: false,
-      useInheritedMediaQuery: true,
-      locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
-      theme: AppTheme.darkTheme,
-      scrollBehavior: const AppScrollBehavior(),
-      home: const HomeView(),
+    return ToastificationWrapper(
+      child: GetMaterialApp(
+        title: 'Polyglot Studio',
+        debugShowCheckedModeBanner: false,
+        useInheritedMediaQuery: true,
+        locale: DevicePreview.locale(context),
+        builder: DevicePreview.appBuilder,
+        theme: AppTheme.darkTheme,
+        scrollBehavior: const AppScrollBehavior(),
+        home: const HomeView(),
+      ),
     );
   }
 }
-

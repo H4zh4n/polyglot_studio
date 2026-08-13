@@ -1,6 +1,5 @@
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 import '../../controllers/polyglot_controller.dart';
@@ -8,6 +7,7 @@ import '../../models/app_file.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/number_utils.dart';
 import 'widgets/audio_player_preview.dart';
+import 'widgets/html_document_preview.dart';
 import 'widgets/image_preview_dialog.dart';
 import 'widgets/video_player_preview.dart';
 
@@ -856,64 +856,10 @@ class _PolyglotInspectorViewState extends State<PolyglotInspectorView> {
       return const SizedBox.shrink();
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderSubtle),
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.code, size: 14, color: AppTheme.accent),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: Text(
-                  'Embedded Webpage Document Source',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.copy, size: 13, color: AppTheme.textSecondary),
-                tooltip: 'Copy HTML to Clipboard',
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: html));
-                  Get.snackbar(
-                    'Copied',
-                    'HTML content copied to clipboard',
-                    snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: const Color(0xFF1E222A),
-                    colorText: const Color(0xFFF9FAFB),
-                    duration: const Duration(seconds: 2),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxHeight: 150),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppTheme.borderSubtle),
-            ),
-            child: SingleChildScrollView(
-              child: SelectableText(
-                html,
-                style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: AppTheme.textSecondary, height: 1.4),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return HtmlDocumentPreview(
+      htmlContent: html,
+      fileName: res.fileName,
+      htmlInfo: res.htmlInfo,
     );
   }
 

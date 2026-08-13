@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 import '../../../controllers/polyglot_controller.dart';
 import '../../../theme/app_theme.dart';
+import '../../../utils/notify.dart';
 import '../../../utils/number_utils.dart';
 
 /// Fullscreen interactive image viewer with pan, zoom, transparency checkerboard, and metadata.
@@ -128,13 +129,9 @@ class _ImagePreviewDialogState extends State<ImagePreviewDialog> with SingleTick
     if (info.byteOffset != null) buffer.writeln('Stream Offset: Byte ${NumberUtils.formatInt(info.byteOffset!)}');
 
     Clipboard.setData(ClipboardData(text: buffer.toString()));
-    Get.snackbar(
+    Notify.success(
       'Metadata Copied',
-      'Image properties copied to clipboard',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF1E222A),
-      colorText: const Color(0xFFF9FAFB),
-      duration: const Duration(seconds: 2),
+      description: 'Image properties copied to clipboard',
     );
   }
 

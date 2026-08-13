@@ -82,6 +82,51 @@ class MediaMetadataInfo {
   });
 }
 
+/// Detailed metadata and structural breakdown of embedded or standalone HTML documents.
+class HtmlMetadataInfo {
+  final String? title;
+  final int scriptCount;
+  final int styleCount;
+  final int linkCount;
+  final int imageTagCount;
+  final int anchorCount;
+  final int formCount;
+  final int canvasCount;
+  final int svgCount;
+  final int buttonCount;
+  final int inputCount;
+  final bool hasInlineStyles;
+  final bool hasJavaScript;
+  final bool hasCss;
+  final List<String> scriptSources;
+  final List<String> stylesheetHrefs;
+  final String? cleanBodyHtml;
+  final int lineCount;
+  final int characterCount;
+
+  const HtmlMetadataInfo({
+    this.title,
+    this.scriptCount = 0,
+    this.styleCount = 0,
+    this.linkCount = 0,
+    this.imageTagCount = 0,
+    this.anchorCount = 0,
+    this.formCount = 0,
+    this.canvasCount = 0,
+    this.svgCount = 0,
+    this.buttonCount = 0,
+    this.inputCount = 0,
+    this.hasInlineStyles = false,
+    this.hasJavaScript = false,
+    this.hasCss = false,
+    this.scriptSources = const [],
+    this.stylesheetHrefs = const [],
+    this.cleanBodyHtml,
+    this.lineCount = 0,
+    this.characterCount = 0,
+  });
+}
+
 /// Analysis result produced by inspecting a polyglot file header and byte map.
 class PolyglotInspectionResult {
   final String fileName;
@@ -109,6 +154,7 @@ class PolyglotInspectionResult {
   final ImageMetadataInfo imageInfo;
   final List<ZipEntryInfo> zipEntries;
   final String? extractedHtmlContent;
+  final HtmlMetadataInfo htmlInfo;
   final Uint8List? extractedPdfBytes;
   final String? pdfVersion;
   final int pdfPageCount;
@@ -139,6 +185,7 @@ class PolyglotInspectionResult {
     this.imageInfo = const ImageMetadataInfo(),
     this.zipEntries = const [],
     this.extractedHtmlContent,
+    this.htmlInfo = const HtmlMetadataInfo(),
     this.extractedPdfBytes,
     this.pdfVersion,
     this.pdfPageCount = 0,
@@ -383,27 +430,48 @@ class PolyglotInspector {
     // 7. Check HTML wrapper & extract content
     bool hasHtml = false;
     String? extractedHtmlContent;
-    final sampleString = String.fromCharCodes(bytes.sublist(0, bytes.length >= 8192 ? 8192 : bytes.length));
-    if (sampleString.contains('<style>body{font-size:0}</style>') ||
-        sampleString.contains('<!--') ||
-        sampleString.contains('<!DOCTYPE html>') ||
-        sampleString.contains('<html')) {
-      hasHtml = true;
+    HtmlMetadataInfo htmlInfo = const HtmlMetadataInfo();
+    final sampleString = String.fromCharCodes(bytes.sublist(0, bytes.length >= 65536 ? 65536 : bytes.length));
 
-      // Extract HTML text
-      int startIdx = sampleString.indexOf('<!DOCTYPE');
-      if (startIdx == -1) startIdx = sampleString.indexOf('<html');
-      if (startIdx == -1) startIdx = sampleString.indexOf('<style>body{font-size:0}</style>');
-      if (startIdx == -1) startIdx = sampleString.indexOf('<!--');
-      if (startIdx != -1) {
-        int endIdx = sampleString.indexOf('</html>', startIdx);
-        if (endIdx != -1) {
-          extractedHtmlContent = sampleString.substring(startIdx, endIdx + 7);
-        } else {
-          final takeLen = (sampleString.length - startIdx > 2000) ? 2000 : sampleString.length - startIdx;
-          extractedHtmlContent = sampleString.substring(startIdx, startIdx + takeLen);
+    final isStandaloneHtml = fileName.toLowerCase().endsWith('.html') || fileName.toLowerCase().endsWith('.htm');
+    if (isStandaloneHtml) {
+      hasHtml = true;
+      try {
+        extractedHtmlContent = utf8.decode(bytes, allowMalformed: true);
+      } catch (_) {
+        extractedHtmlContent = String.fromCharCodes(bytes);
+      }
+    } else {
+      if (sampleString.contains('<style>body{font-size:0}</style>') ||
+          sampleString.contains('<!--') ||
+          sampleString.contains('<!DOCTYPE html>') ||
+          sampleString.contains('<html') ||
+          sampleString.contains('<body')) {
+        hasHtml = true;
+
+        // Extract full HTML text
+        int startIdx = sampleString.indexOf('<!DOCTYPE');
+        if (startIdx == -1) startIdx = sampleString.indexOf('<html');
+        if (startIdx == -1) startIdx = sampleString.indexOf('<style>body{font-size:0}</style>');
+        if (startIdx == -1) startIdx = sampleString.indexOf('<!--');
+        if (startIdx != -1) {
+          int endIdx = sampleString.indexOf('</html>', startIdx);
+          if (endIdx != -1) {
+            extractedHtmlContent = sampleString.substring(startIdx, endIdx + 7);
+          } else {
+            final closeComment = sampleString.indexOf('<!--', startIdx + 10);
+            if (closeComment != -1) {
+              extractedHtmlContent = sampleString.substring(startIdx, closeComment + 4);
+            } else {
+              extractedHtmlContent = sampleString.substring(startIdx);
+            }
+          }
         }
       }
+    }
+
+    if (extractedHtmlContent != null && extractedHtmlContent.isNotEmpty) {
+      htmlInfo = _analyzeHtml(extractedHtmlContent);
     }
 
     // 8. Check PDF stream & extract metadata
@@ -692,6 +760,7 @@ class PolyglotInspector {
       imageInfo: imageInfo,
       zipEntries: zipEntries,
       extractedHtmlContent: extractedHtmlContent,
+      htmlInfo: htmlInfo,
       extractedPdfBytes: extractedPdfBytes,
       pdfVersion: pdfVersion,
       pdfPageCount: pdfPageCount,
@@ -704,6 +773,82 @@ class PolyglotInspector {
         atomBoxes: atomBoxes,
         isVideo: isVideoMedia,
       ),
+    );
+  }
+
+  static HtmlMetadataInfo _analyzeHtml(String htmlContent) {
+    if (htmlContent.isEmpty) return const HtmlMetadataInfo();
+
+    // Extract <title>
+    final titleMatch = RegExp(r'<title[^>]*>(.*?)</title>', caseSensitive: false, dotAll: true).firstMatch(htmlContent);
+    final title = titleMatch?.group(1)?.trim();
+
+    // Count scripts & extract sources
+    final scriptMatches = RegExp(r'<script\b([^>]*)>(.*?)</script>', caseSensitive: false, dotAll: true).allMatches(htmlContent).toList();
+    final selfClosingScripts = RegExp(r'<script\b([^>]*)/?>', caseSensitive: false).allMatches(htmlContent).length;
+    final scriptCount = scriptMatches.isNotEmpty ? scriptMatches.length : selfClosingScripts;
+
+    final scriptSources = <String>[];
+    for (final m in RegExp(r'<script[^>]+src=["' "'" r']([^"' "'" r']+)["' "'" r']', caseSensitive: false).allMatches(htmlContent)) {
+      final src = m.group(1);
+      if (src != null && src.isNotEmpty) scriptSources.add(src);
+    }
+
+    // Count styles & stylesheets
+    final styleCount = RegExp(r'<style\b[^>]*>', caseSensitive: false).allMatches(htmlContent).length;
+    final linkMatches = RegExp(r'<link\b[^>]*>', caseSensitive: false).allMatches(htmlContent).toList();
+    final stylesheetHrefs = <String>[];
+    for (final m in RegExp(r'<link[^>]+(?:rel=["' "'" r']stylesheet["' "'" r'])[^>]+href=["' "'" r']([^"' "'" r']+)["' "'" r']', caseSensitive: false).allMatches(htmlContent)) {
+      final href = m.group(1);
+      if (href != null && href.isNotEmpty) stylesheetHrefs.add(href);
+    }
+
+    // Tag counts
+    final imgCount = RegExp(r'<img\b', caseSensitive: false).allMatches(htmlContent).length;
+    final anchorCount = RegExp(r'<a\b', caseSensitive: false).allMatches(htmlContent).length;
+    final formCount = RegExp(r'<form\b', caseSensitive: false).allMatches(htmlContent).length;
+    final canvasCount = RegExp(r'<canvas\b', caseSensitive: false).allMatches(htmlContent).length;
+    final svgCount = RegExp(r'<svg\b', caseSensitive: false).allMatches(htmlContent).length;
+    final buttonCount = RegExp(r'<button\b', caseSensitive: false).allMatches(htmlContent).length;
+    final inputCount = RegExp(r'<input\b', caseSensitive: false).allMatches(htmlContent).length;
+
+    final hasInlineStyles = RegExp(r'\bstyle=["' "'" r'][^"' "'" r']+["' "'" r']', caseSensitive: false).hasMatch(htmlContent);
+    final hasInlineEvents = RegExp(r'\bon[a-z]+=["' "'" r'][^"' "'" r']+["' "'" r']', caseSensitive: false).hasMatch(htmlContent);
+    final hasJavaScript = scriptCount > 0 || hasInlineEvents || htmlContent.contains('javascript:');
+    final hasCss = styleCount > 0 || stylesheetHrefs.isNotEmpty || hasInlineStyles;
+
+    // Clean body extract if polyglot wrapper
+    String? cleanBody;
+    if (htmlContent.contains('<style>body{font-size:0}</style><div style=font-size:initial>')) {
+      final start = htmlContent.indexOf('<div style=font-size:initial>') + '<div style=font-size:initial>'.length;
+      final end = htmlContent.indexOf('</div><!--', start);
+      if (end != -1) {
+        cleanBody = htmlContent.substring(start, end);
+      }
+    }
+
+    final lines = htmlContent.split('\n').length;
+
+    return HtmlMetadataInfo(
+      title: title,
+      scriptCount: scriptCount,
+      styleCount: styleCount,
+      linkCount: linkMatches.length,
+      imageTagCount: imgCount,
+      anchorCount: anchorCount,
+      formCount: formCount,
+      canvasCount: canvasCount,
+      svgCount: svgCount,
+      buttonCount: buttonCount,
+      inputCount: inputCount,
+      hasInlineStyles: hasInlineStyles,
+      hasJavaScript: hasJavaScript,
+      hasCss: hasCss,
+      scriptSources: scriptSources,
+      stylesheetHrefs: stylesheetHrefs,
+      cleanBodyHtml: cleanBody,
+      lineCount: lines,
+      characterCount: htmlContent.length,
     );
   }
 }

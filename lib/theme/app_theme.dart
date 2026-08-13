@@ -19,6 +19,13 @@ class AppTheme {
   static const Color danger = Color(0xFFF87171);        // Muted Coral Red
   static const Color neutralTag = Color(0xFF374151);    // Neutral Slate Tag
 
+  // Notification status colors
+  static const Color successGreen = Color(0xFF10B981);
+  static const Color errorRed = Color(0xFFEF4444);
+  static const Color primaryBlue = Color(0xFF3B82F6);
+  static const Color surfaceWhite = Color(0xFFFFFFFF);
+  static const Color textGrey = Color(0xFF6B7280);
+
   // Typographic hierarchy
   static const Color textPrimary = Color(0xFFF9FAFB);   // Pure crisp white
   static const Color textSecondary = Color(0xFF9CA3AF); // Neutral silver gray

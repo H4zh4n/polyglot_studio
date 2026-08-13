@@ -1,11 +1,12 @@
+import 'dart:convert' show utf8;
 import 'dart:io' show File, Platform, Process;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as p;
 import 'package:polyglot_core/polyglot_core.dart';
 import '../models/app_file.dart';
+import '../utils/notify.dart';
 import '../utils/number_utils.dart';
 
 /// GetX Controller for managing in-memory polyglot generation and inspection across Web and native platforms.
@@ -250,27 +251,15 @@ class PolyglotController extends GetxController {
         fileName: combinedFileName,
       );
 
-      Get.snackbar(
+      Notify.success(
         'Polyglot Ready',
-        'Assembled in memory (${NumberUtils.formatSizeKb(result.totalBytes)})',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Assembled in memory (${NumberUtils.formatSizeKb(result.totalBytes)})',
       );
     } catch (e) {
       statusMessage.value = 'Error: $e';
-      Get.snackbar(
+      Notify.error(
         'Generation Error',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF87171),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 5),
+        description: e.toString(),
       );
     } finally {
       isGenerating.value = false;
@@ -292,15 +281,9 @@ class PolyglotController extends GetxController {
     );
 
     if (kIsWeb) {
-      Get.snackbar(
+      Notify.success(
         'File Downloaded',
-        'Downloaded $defaultName',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Downloaded $defaultName',
       );
       return;
     }
@@ -310,15 +293,9 @@ class PolyglotController extends GetxController {
       await file.writeAsBytes(result.data);
       lastSavedFilePath.value = savePath;
 
-      Get.snackbar(
+      Notify.success(
         'File Saved',
-        'Saved to $savePath',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Saved to $savePath',
       );
     }
   }
@@ -341,12 +318,9 @@ class PolyglotController extends GetxController {
       final name = file.name;
       inspectionResult.value = PolyglotInspector.inspect(bytes: bytes, fileName: name);
     } catch (e) {
-      Get.snackbar(
+      Notify.error(
         'Inspection Failed',
-        e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF87171),
+        description: e.toString(),
       );
     } finally {
       isInspecting.value = false;
@@ -371,15 +345,9 @@ class PolyglotController extends GetxController {
     );
 
     if (kIsWeb) {
-      Get.snackbar(
+      Notify.success(
         'Image Downloaded',
-        'Downloaded $defaultName (${NumberUtils.formatBytesExact(res.extractedImageBytes!.length)})',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Downloaded $defaultName (${NumberUtils.formatBytesExact(res.extractedImageBytes!.length)})',
       );
       return;
     }
@@ -387,15 +355,9 @@ class PolyglotController extends GetxController {
     if (savePath != null) {
       final file = File(savePath);
       await file.writeAsBytes(res.extractedImageBytes!);
-      Get.snackbar(
+      Notify.success(
         'Image Extracted',
-        'Saved image (${NumberUtils.formatBytesExact(res.extractedImageBytes!.length)}) to $savePath',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Saved image (${NumberUtils.formatBytesExact(res.extractedImageBytes!.length)}) to $savePath',
       );
     }
   }
@@ -420,15 +382,9 @@ class PolyglotController extends GetxController {
     );
 
     if (kIsWeb) {
-      Get.snackbar(
+      Notify.success(
         'Media Downloaded',
-        'Downloaded $defaultName (${NumberUtils.formatBytesExact(bytesToSave.length)})',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Downloaded $defaultName (${NumberUtils.formatBytesExact(bytesToSave.length)})',
       );
       return;
     }
@@ -436,15 +392,9 @@ class PolyglotController extends GetxController {
     if (savePath != null) {
       final file = File(savePath);
       await file.writeAsBytes(bytesToSave);
-      Get.snackbar(
+      Notify.success(
         'Media Extracted',
-        'Saved media (${NumberUtils.formatBytesExact(bytesToSave.length)}) to $savePath',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Saved media (${NumberUtils.formatBytesExact(bytesToSave.length)}) to $savePath',
       );
     }
   }
@@ -462,15 +412,9 @@ class PolyglotController extends GetxController {
     );
 
     if (kIsWeb) {
-      Get.snackbar(
+      Notify.success(
         'Payload Downloaded',
-        'Downloaded extracted_payload.bin (${NumberUtils.formatBytesExact(res.appendableBytes!.length)})',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Downloaded extracted_payload.bin (${NumberUtils.formatBytesExact(res.appendableBytes!.length)})',
       );
       return;
     }
@@ -478,15 +422,49 @@ class PolyglotController extends GetxController {
     if (savePath != null) {
       final file = File(savePath);
       await file.writeAsBytes(res.appendableBytes!);
-      Get.snackbar(
+      Notify.success(
         'Payload Extracted',
-        'Saved payload (${NumberUtils.formatBytesExact(res.appendableBytes!.length)}) to $savePath',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF1E222A),
-        colorText: const Color(0xFFF9FAFB),
-        borderColor: const Color(0x33FFFFFF),
-        borderWidth: 1,
-        duration: const Duration(seconds: 4),
+        description: 'Saved payload (${NumberUtils.formatBytesExact(res.appendableBytes!.length)}) to $savePath',
+      );
+    }
+  }
+
+  // Extract clean detected HTML content to a file
+  Future<void> extractHtmlFile() async {
+    final res = inspectionResult.value;
+    if (res == null) return;
+
+    final contentToExport = (res.htmlInfo.cleanBodyHtml != null && res.htmlInfo.cleanBodyHtml!.isNotEmpty)
+        ? res.htmlInfo.cleanBodyHtml!
+        : (res.extractedHtmlContent ?? '');
+    if (contentToExport.isEmpty) return;
+
+    final baseName = p.basenameWithoutExtension(res.fileName);
+    final defaultName = '${baseName}_clean.html';
+    final bytesToSave = Uint8List.fromList(utf8.encode(contentToExport));
+
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Clean Extracted HTML to Disk',
+      fileName: defaultName,
+      type: FileType.custom,
+      allowedExtensions: ['html', 'htm', 'txt'],
+      bytes: bytesToSave,
+    );
+
+    if (kIsWeb) {
+      Notify.success(
+        'HTML Downloaded',
+        description: 'Downloaded $defaultName (${NumberUtils.formatBytesExact(bytesToSave.length)})',
+      );
+      return;
+    }
+
+    if (savePath != null) {
+      final file = File(savePath);
+      await file.writeAsBytes(bytesToSave);
+      Notify.success(
+        'HTML Extracted',
+        description: 'Saved clean HTML (${NumberUtils.formatBytesExact(bytesToSave.length)}) to $savePath',
       );
     }
   }

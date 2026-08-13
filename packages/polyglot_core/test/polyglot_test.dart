@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:polyglot_core/polyglot_core.dart';
@@ -159,6 +160,79 @@ void main() {
       expect(inspected.extractedImageBytes, isNotNull);
       expect(inspected.extractedMediaBytes, isNotNull);
       expect(inspected.extractedMediaBytes!.length > 32, isTrue);
+    });
+  });
+
+  group('PolyglotInspector HTML & CSS/JS Tests', () {
+    test('Inspects standalone HTML with CSS and JavaScript and parses metadata', () {
+      const htmlText = '''
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Interactive App</title>
+  <style>body { background: #000; color: #fff; }</style>
+  <link rel="stylesheet" href="https://cdn.example.com/styles.css">
+  <script src="https://cdn.example.com/app.js"></script>
+</head>
+<body>
+  <h1>Hello World</h1>
+  <canvas id="canvas" width="100" height="100"></canvas>
+  <button onclick="console.log('clicked')">Click</button>
+  <a href="https://example.com">Link</a>
+  <script>
+    console.log("inline script");
+  </script>
+</body>
+</html>
+''';
+      final htmlBytes = Uint8List.fromList(utf8.encode(htmlText));
+      final res = PolyglotInspector.inspect(bytes: htmlBytes, fileName: 'index.html');
+
+      expect(res.detectedFormats.contains('.html'), isTrue);
+      expect(res.extractedHtmlContent, isNotNull);
+      expect(res.htmlInfo.title, equals('Interactive App'));
+      expect(res.htmlInfo.hasCss, isTrue);
+      expect(res.htmlInfo.hasJavaScript, isTrue);
+      expect(res.htmlInfo.scriptCount, equals(2));
+      expect(res.htmlInfo.styleCount, equals(1));
+      expect(res.htmlInfo.canvasCount, equals(1));
+      expect(res.htmlInfo.anchorCount, equals(1));
+      expect(res.htmlInfo.buttonCount, equals(1));
+      expect(res.htmlInfo.scriptSources.contains('https://cdn.example.com/app.js'), isTrue);
+      expect(res.htmlInfo.stylesheetHrefs.contains('https://cdn.example.com/styles.css'), isTrue);
+    });
+
+    test('PolyglotGenerator with HTML content extracts clean html metadata', () async {
+      final testImg = img.Image(width: 16, height: 16);
+      img.fill(testImg, color: img.ColorRgba8(255, 0, 0, 255));
+      final pngBytes = Uint8List.fromList(img.encodePng(testImg));
+
+      final rawMp4 = Uint8List.fromList([
+        0x00, 0x00, 0x00, 0x20, // size 32
+        0x66, 0x74, 0x79, 0x70, // ftyp
+        0x69, 0x73, 0x6F, 0x6D,
+        0x00, 0x00, 0x02, 0x00,
+        0x69, 0x73, 0x6F, 0x6D,
+        0x69, 0x73, 0x6F, 0x32,
+        0x61, 0x76, 0x63, 0x31,
+        0x6D, 0x70, 0x34, 0x31,
+      ]);
+
+      final result = await PolyglotGenerator.generate(PolyglotInputs(
+        imageBytes: pngBytes,
+        imageName: 'icon.png',
+        mediaBytes: rawMp4,
+        mediaName: 'vid.mp4',
+        isVideo: true,
+        htmlContent: '<title>Polyglot Page</title><style>.box{color:red}</style><h1>Polyglot Header</h1><script>alert(1)</script>',
+      ));
+
+      final inspected = PolyglotInspector.inspect(bytes: result.data, fileName: 'polyglot.ico.mp4.html');
+      expect(inspected.detectedFormats.contains('.html'), isTrue);
+      expect(inspected.extractedHtmlContent, isNotNull);
+      expect(inspected.htmlInfo.hasCss, isTrue);
+      expect(inspected.htmlInfo.hasJavaScript, isTrue);
+      expect(inspected.htmlInfo.title, equals('Polyglot Page'));
     });
   });
 }

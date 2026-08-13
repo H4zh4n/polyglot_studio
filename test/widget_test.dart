@@ -9,6 +9,7 @@ import 'package:polyglot/controllers/polyglot_controller.dart';
 import 'package:polyglot/main.dart';
 import 'package:polyglot/models/app_file.dart';
 import 'package:polyglot/views/inspector/widgets/audio_player_preview.dart';
+import 'package:polyglot/views/inspector/widgets/html_document_preview.dart';
 import 'package:polyglot_core/polyglot_core.dart';
 
 void main() {
@@ -334,5 +335,54 @@ void main() {
     expect(find.text('.M4A'), findsOneWidget);
     expect(find.text('Export Audio'), findsOneWidget);
     expect(find.text('Codec: AAC Audio (M4A)', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('HTML format in inspector displays HtmlDocumentPreview with DOM overview and tabs',
+      (WidgetTester tester) async {
+    final controller = Get.put(PolyglotController());
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    controller.selectedViewMode.value = 1;
+    controller.inspectionResult.value = PolyglotInspectionResult(
+      fileName: 'interactive.html',
+      fileSize: 4500,
+      headerBytes: Uint8List.fromList([0x3C, 0x21, 0x44, 0x4F, 0x43, 0x54, 0x59, 0x50]),
+      extraHeaderString: '',
+      hasIcoHeader: false,
+      hasSecondaryFtyp: false,
+      hasHtmlWrapper: true,
+      hasPdfStream: false,
+      hasZipEocd: false,
+      detectedFormats: ['.html'],
+      extractedHtmlContent: '<!DOCTYPE html><html><head><title>Test App</title><style>body{color:red}</style><script>console.log(1)</script></head><body><h1>Hello</h1></body></html>',
+      htmlInfo: const HtmlMetadataInfo(
+        title: 'Test App',
+        hasCss: true,
+        hasJavaScript: true,
+        scriptCount: 1,
+        styleCount: 1,
+        lineCount: 1,
+        characterCount: 140,
+      ),
+    );
+
+    await tester.pumpWidget(const PolyglotApp());
+    await tester.pumpAndSettle();
+
+    // Verify HTML Document Preview is rendered
+    expect(find.byType(HtmlDocumentPreview), findsOneWidget);
+    expect(find.text('Test App'), findsWidgets);
+    expect(find.text('Open in Browser'), findsOneWidget);
+    expect(find.text('Overview & DOM'), findsOneWidget);
+    expect(find.text('Code Source'), findsOneWidget);
+    expect(find.text('JavaScript (1)'), findsOneWidget);
+    expect(find.text('CSS & Styles (1)'), findsOneWidget);
+
+    // Switch to Code Source tab
+    await tester.tap(find.text('Code Source'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget); // Search bar
   });
 }
