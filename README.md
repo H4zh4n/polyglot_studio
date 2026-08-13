@@ -279,5 +279,4 @@ dart test
 ## 🙏 Acknowledgements & Credits
 
 The core binary polyglot synthesis concepts, atom arrangements, and techniques in this project are
-based on the original **[beheader](https://github.com/p2r3/beheader)** tool by *
-*[p2r3](https://github.com/p2r3)**.
+based on the original **[beheader](https://github.com/p2r3/beheader)** tool by **[p2r3](https://github.com/p2r3)**.
