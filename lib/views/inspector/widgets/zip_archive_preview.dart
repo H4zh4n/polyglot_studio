@@ -1,5 +1,5 @@
 import 'dart:convert' show utf8;
-import 'dart:io' show Directory, File, Platform, Process;
+import 'dart:io' show Directory, File, Platform, Process, ProcessStartMode;
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -1343,11 +1343,11 @@ class _ZipEmbeddedPdfPreviewState extends State<_ZipEmbeddedPdfPreview> {
       final tempFile = File(p.join(tempDir.path, 'polyglot_zip_preview_${DateTime.now().millisecondsSinceEpoch}_$cleanName.pdf'));
       await tempFile.writeAsBytes(normalized, flush: true);
       if (Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', tempFile.path]);
+        await Process.start('cmd', ['/c', 'start', '', tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isMacOS) {
-        await Process.run('open', [tempFile.path]);
+        await Process.start('open', [tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [tempFile.path]);
+        await Process.start('xdg-open', [tempFile.path], mode: ProcessStartMode.detached);
       }
       Notify.success('Launched in System Viewer', description: 'Opened ${widget.fileName} in default viewer');
     } catch (e) {
@@ -1591,11 +1591,11 @@ class _ZipEmbeddedHtmlPreviewState extends State<_ZipEmbeddedHtmlPreview> {
       final tempFile = File(p.join(tempDir.path, 'polyglot_zip_preview_${DateTime.now().millisecondsSinceEpoch}_$cleanName.html'));
       await tempFile.writeAsString(_htmlText, flush: true);
       if (Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', tempFile.path]);
+        await Process.start('cmd', ['/c', 'start', '', tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isMacOS) {
-        await Process.run('open', [tempFile.path]);
+        await Process.start('open', [tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [tempFile.path]);
+        await Process.start('xdg-open', [tempFile.path], mode: ProcessStartMode.detached);
       }
       Notify.success('Launched in Browser', description: 'Opened ${widget.fileName} in default browser');
     } catch (e) {

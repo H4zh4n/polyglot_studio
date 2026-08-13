@@ -1,4 +1,4 @@
-import 'dart:io' show Directory, File, Platform, Process;
+import 'dart:io' show Directory, File, Platform, Process, ProcessStartMode;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show EagerGestureRecognizer, GestureBinding, PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
@@ -278,11 +278,11 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
       await tempFile.writeAsBytes(normalizedBytes, flush: true);
 
       if (Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', tempFile.path]);
+        await Process.start('cmd', ['/c', 'start', '', tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isMacOS) {
-        await Process.run('open', [tempFile.path]);
+        await Process.start('open', [tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [tempFile.path]);
+        await Process.start('xdg-open', [tempFile.path], mode: ProcessStartMode.detached);
       }
 
       Notify.success(

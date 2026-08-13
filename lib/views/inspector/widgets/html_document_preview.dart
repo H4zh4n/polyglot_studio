@@ -1,4 +1,4 @@
-import 'dart:io' show Directory, File, Platform, Process;
+import 'dart:io' show Directory, File, Platform, Process, ProcessStartMode;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -285,11 +285,11 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
       await tempFile.writeAsString(widget.htmlContent, flush: true);
 
       if (Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', tempFile.path]);
+        await Process.start('cmd', ['/c', 'start', '', tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isMacOS) {
-        await Process.run('open', [tempFile.path]);
+        await Process.start('open', [tempFile.path], mode: ProcessStartMode.detached);
       } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [tempFile.path]);
+        await Process.start('xdg-open', [tempFile.path], mode: ProcessStartMode.detached);
       }
 
       Notify.success(

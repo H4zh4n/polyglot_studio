@@ -480,7 +480,7 @@ class PolyglotInspector {
     bool hasHtml = false;
     String? extractedHtmlContent;
     HtmlMetadataInfo htmlInfo = const HtmlMetadataInfo();
-    final sampleString = String.fromCharCodes(bytes.sublist(0, bytes.length >= 65536 ? 65536 : bytes.length));
+    final fullAsciiString = String.fromCharCodes(bytes);
 
     final isStandaloneHtml = fileName.toLowerCase().endsWith('.html') || fileName.toLowerCase().endsWith('.htm');
     if (isStandaloneHtml) {
@@ -488,31 +488,67 @@ class PolyglotInspector {
       try {
         extractedHtmlContent = utf8.decode(bytes, allowMalformed: true);
       } catch (_) {
-        extractedHtmlContent = String.fromCharCodes(bytes);
+        extractedHtmlContent = fullAsciiString;
       }
     } else {
-      if (sampleString.contains('<style>body{font-size:0}</style>') ||
-          sampleString.contains('<!--') ||
-          sampleString.contains('<!DOCTYPE html>') ||
-          sampleString.contains('<html') ||
-          sampleString.contains('<body')) {
-        hasHtml = true;
+      final lowerText = fullAsciiString.toLowerCase();
 
-        // Extract full HTML text
-        int startIdx = sampleString.indexOf('<!DOCTYPE');
-        if (startIdx == -1) startIdx = sampleString.indexOf('<html');
-        if (startIdx == -1) startIdx = sampleString.indexOf('<style>body{font-size:0}</style>');
-        if (startIdx == -1) startIdx = sampleString.indexOf('<!--');
-        if (startIdx != -1) {
-          int endIdx = sampleString.indexOf('</html>', startIdx);
-          if (endIdx != -1) {
-            extractedHtmlContent = sampleString.substring(startIdx, endIdx + 7);
-          } else {
-            final closeComment = sampleString.indexOf('<!--', startIdx + 10);
-            if (closeComment != -1) {
-              extractedHtmlContent = sampleString.substring(startIdx, closeComment + 4);
+      final docIdx = lowerText.indexOf('<!doctype');
+      final htmlIdx = lowerText.indexOf('<html');
+      final styleWrapper = lowerText.indexOf('<style>body{font-size:0}</style>');
+      final bodyIdx = lowerText.indexOf('<body');
+      final commentIdx = lowerText.indexOf('<!--');
+
+      if (docIdx != -1 || htmlIdx != -1 || styleWrapper != -1 || bodyIdx != -1 || commentIdx != -1) {
+        int startIdx = -1;
+        if (docIdx != -1) {
+          startIdx = docIdx;
+        } else if (htmlIdx != -1) {
+          startIdx = htmlIdx;
+        } else if (styleWrapper != -1) {
+          startIdx = styleWrapper;
+        } else if (bodyIdx != -1) {
+          startIdx = bodyIdx;
+        } else if (commentIdx != -1) {
+          // Check if there is a closing comment '-->' with HTML following it
+          final closeIdx = lowerText.indexOf('-->', commentIdx);
+          if (closeIdx != -1) {
+            final subStart = closeIdx + 3;
+            final subDoc = lowerText.indexOf('<!doctype', subStart);
+            final subHtml = lowerText.indexOf('<html', subStart);
+            final subBody = lowerText.indexOf('<body', subStart);
+            if (subDoc != -1) {
+              startIdx = subDoc;
+            } else if (subHtml != -1) {
+              startIdx = subHtml;
+            } else if (subBody != -1) {
+              startIdx = subBody;
             } else {
-              extractedHtmlContent = sampleString.substring(startIdx);
+              startIdx = subStart;
+            }
+          } else {
+            startIdx = commentIdx;
+          }
+        }
+
+        if (startIdx != -1 && startIdx < fullAsciiString.length) {
+          hasHtml = true;
+          int endIdx = lowerText.indexOf('</html>', startIdx);
+          if (endIdx != -1) {
+            extractedHtmlContent = fullAsciiString.substring(startIdx, endIdx + 7);
+          } else {
+            int bodyEnd = lowerText.indexOf('</body>', startIdx);
+            if (bodyEnd != -1) {
+              extractedHtmlContent = fullAsciiString.substring(startIdx, bodyEnd + 7);
+            } else {
+              int nextBin = fullAsciiString.indexOf('\x89PNG', startIdx);
+              if (nextBin == -1) nextBin = fullAsciiString.indexOf('PK\x03\x04', startIdx);
+              if (nextBin == -1) nextBin = fullAsciiString.indexOf('%PDF-', startIdx);
+              if (nextBin != -1) {
+                extractedHtmlContent = fullAsciiString.substring(startIdx, nextBin);
+              } else {
+                extractedHtmlContent = fullAsciiString.substring(startIdx);
+              }
             }
           }
         }
@@ -540,7 +576,7 @@ class PolyglotInspector {
       }
     }
 
-    if (pdfStart != -1 || sampleString.contains('1 0 obj')) {
+    if (pdfStart != -1 || fullAsciiString.contains('1 0 obj')) {
       hasPdf = true;
       pdfOffset = pdfStart != -1 ? pdfStart : 0;
 

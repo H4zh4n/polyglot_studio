@@ -1,5 +1,5 @@
 import 'dart:convert' show utf8;
-import 'dart:io' show File, Platform, Process;
+import 'dart:io' show File, Platform, Process, ProcessStartMode;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
@@ -606,11 +606,11 @@ class PolyglotController extends GetxController {
 
     try {
       if (Platform.isWindows) {
-        await Process.run('explorer.exe', ['/select,', filePath]);
+        await Process.start('explorer.exe', ['/select,', filePath], mode: ProcessStartMode.detached);
       } else if (Platform.isMacOS) {
-        await Process.run('open', ['-R', filePath]);
+        await Process.start('open', ['-R', filePath], mode: ProcessStartMode.detached);
       } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [p.dirname(filePath)]);
+        await Process.start('xdg-open', [p.dirname(filePath)], mode: ProcessStartMode.detached);
       }
     } catch (_) {}
   }
