@@ -1,5 +1,6 @@
 import 'dart:io' show Directory, File, Platform, Process;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show PointerScrollEvent, PointerSignalEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -43,6 +44,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
   bool _isLoadingPdf = true;
   String? _pdfError;
   double _currentScale = 1.0;
+  bool _isDragging = false;
 
   @override
   void initState() {
@@ -152,17 +154,48 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     }
   }
 
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent) {
+      final scrollDelta = event.scrollDelta.dy;
+      if (scrollDelta == 0) return;
+
+      final zoomFactor = scrollDelta < 0 ? 1.15 : 0.85;
+      final newScale = (_currentScale * zoomFactor).clamp(0.8, 4.5);
+      if ((newScale - _currentScale).abs() < 0.001) return;
+
+      final focalPoint = event.localPosition;
+      final currentMatrix = _transformationController.value;
+      final currentTrans = currentMatrix.getTranslation();
+
+      final double tx = focalPoint.dx - zoomFactor * (focalPoint.dx - currentTrans.x);
+      final double ty = focalPoint.dy - zoomFactor * (focalPoint.dy - currentTrans.y);
+
+      if (newScale <= 1.02 && newScale >= 0.98) {
+        _transformationController.value = Matrix4.identity();
+      } else {
+        final Matrix4 newMatrix = Matrix4.identity()
+          ..setEntry(0, 0, newScale)
+          ..setEntry(1, 1, newScale)
+          ..setEntry(0, 3, tx)
+          ..setEntry(1, 3, ty);
+        _transformationController.value = newMatrix;
+      }
+      setState(() {});
+    }
+  }
+
   void _toggleDoubleTapZoom(TapDownDetails details) {
     final scale = _transformationController.value.getMaxScaleOnAxis();
     if (scale > 1.25) {
       _transformationController.value = Matrix4.identity();
     } else {
       final position = details.localPosition;
-      final matrix = Matrix4.identity()
-        ..setEntry(0, 0, 2.0)
-        ..setEntry(1, 1, 2.0)
-        ..setEntry(0, 3, -position.dx)
-        ..setEntry(1, 3, -position.dy);
+      final double targetScale = 2.0;
+      final Matrix4 matrix = Matrix4.identity()
+        ..setEntry(0, 0, targetScale)
+        ..setEntry(1, 1, targetScale)
+        ..setEntry(0, 3, -position.dx * (targetScale - 1.0))
+        ..setEntry(1, 3, -position.dy * (targetScale - 1.0));
       _transformationController.value = matrix;
     }
     setState(() {});
@@ -713,11 +746,11 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.touch_app_outlined, size: 13, color: AppTheme.accent),
+                  Icon(Icons.pan_tool_outlined, size: 13, color: AppTheme.accent),
                   SizedBox(width: 6),
                   Flexible(
                     child: Text(
-                      'Double-click to zoom in/out • Right-click or drag to pan around',
+                      'Click & drag to pan • Mouse wheel or pinch to zoom • Double-click to zoom in/out',
                       style: TextStyle(fontSize: 10, color: AppTheme.textSecondary, letterSpacing: -0.1),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -739,35 +772,43 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
               border: Border.all(color: AppTheme.borderSubtle.withAlpha(50)),
             ),
             clipBehavior: Clip.antiAlias,
-            child: GestureDetector(
-              onDoubleTapDown: _toggleDoubleTapZoom,
-              child: InteractiveViewer(
-                transformationController: _transformationController,
-                panEnabled: true,
-                scaleEnabled: true,
-                minScale: 0.8,
-                maxScale: 4.0,
-                boundaryMargin: const EdgeInsets.all(80),
-                clipBehavior: Clip.antiAlias,
-                child: PdfView(
-                  controller: _pdfController!,
-                  onPageChanged: (page) {
-                    setState(() {
-                      _currentPage = page;
-                    });
-                  },
-                  builders: PdfViewBuilders<DefaultBuilderOptions>(
-                    options: const DefaultBuilderOptions(
-                      loaderSwitchDuration: Duration(milliseconds: 150),
-                    ),
-                    documentLoaderBuilder: (_) => const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
-                    ),
-                    pageLoaderBuilder: (_) => const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
-                    ),
-                    errorBuilder: (_, error) => Center(
-                      child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+            child: Listener(
+              onPointerSignal: _onPointerSignal,
+              child: MouseRegion(
+                cursor: _isDragging ? SystemMouseCursors.grabbing : SystemMouseCursors.grab,
+                child: GestureDetector(
+                  onDoubleTapDown: _toggleDoubleTapZoom,
+                  child: InteractiveViewer(
+                    transformationController: _transformationController,
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    minScale: 0.8,
+                    maxScale: 4.5,
+                    boundaryMargin: const EdgeInsets.all(120),
+                    clipBehavior: Clip.antiAlias,
+                    onInteractionStart: (_) => setState(() => _isDragging = true),
+                    onInteractionEnd: (_) => setState(() => _isDragging = false),
+                    child: PdfView(
+                      controller: _pdfController!,
+                      onPageChanged: (page) {
+                        setState(() {
+                          _currentPage = page;
+                        });
+                      },
+                      builders: PdfViewBuilders<DefaultBuilderOptions>(
+                        options: const DefaultBuilderOptions(
+                          loaderSwitchDuration: Duration(milliseconds: 150),
+                        ),
+                        documentLoaderBuilder: (_) => const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                        ),
+                        pageLoaderBuilder: (_) => const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.textPrimary),
+                        ),
+                        errorBuilder: (_, error) => Center(
+                          child: Text('Error loading page: $error', style: const TextStyle(fontSize: 10, color: AppTheme.danger)),
+                        ),
+                      ),
                     ),
                   ),
                 ),

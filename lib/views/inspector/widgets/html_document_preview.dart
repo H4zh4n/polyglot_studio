@@ -210,10 +210,10 @@ class HtmlDocumentPreview extends StatefulWidget {
 }
 
 class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
-  HtmlViewMode _selectedTab = HtmlViewMode.overview;
+  HtmlViewMode _selectedTab = HtmlViewMode.source;
   String _searchQuery = '';
   bool _wrapLines = true;
-  bool _renderInApp = false;
+  bool _renderInApp = true;
   final TextEditingController _searchController = TextEditingController();
 
   static const int _pageSize = 250;
@@ -419,8 +419,8 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
             ),
             child: Row(
               children: [
+                Expanded(child: _buildNavTab(HtmlViewMode.source, 'Code Source & Web', Icons.terminal_rounded)),
                 Expanded(child: _buildNavTab(HtmlViewMode.overview, 'Overview & DOM', Icons.dashboard_outlined)),
-                Expanded(child: _buildNavTab(HtmlViewMode.source, 'Code Source', Icons.terminal_rounded)),
                 Expanded(child: _buildNavTab(HtmlViewMode.scripts, 'JavaScript (${info.scriptCount})', Icons.code_rounded)),
                 Expanded(child: _buildNavTab(HtmlViewMode.styles, 'CSS & Styles (${info.styleCount})', Icons.style_outlined)),
               ],
