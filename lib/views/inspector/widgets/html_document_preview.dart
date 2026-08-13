@@ -239,8 +239,15 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
     }
   }
 
+  String get _sourceToDisplay {
+    if (widget.htmlInfo.cleanBodyHtml != null && widget.htmlInfo.cleanBodyHtml!.isNotEmpty) {
+      return widget.htmlInfo.cleanBodyHtml!;
+    }
+    return widget.htmlContent;
+  }
+
   void _splitLines() {
-    _cachedLines = widget.htmlContent.split('\n');
+    _cachedLines = _sourceToDisplay.split('\n');
     _visibleLineCount = _cachedLines.length > _pageSize ? _pageSize : _cachedLines.length;
   }
 
@@ -287,7 +294,7 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
 
       Notify.success(
         'Launched in Browser',
-        description: 'Opened webpage in default system browser',
+        description: 'Opened HTML in default web browser',
       );
     } catch (e) {
       Notify.error(
@@ -298,10 +305,11 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
   }
 
   void _copyToClipboard() {
-    Clipboard.setData(ClipboardData(text: widget.htmlContent));
+    final textToCopy = _sourceToDisplay;
+    Clipboard.setData(ClipboardData(text: textToCopy));
     Notify.success(
       'Copied to Clipboard',
-      description: 'HTML source copied (${widget.htmlContent.length} characters)',
+      description: 'HTML source copied (${textToCopy.length} characters)',
     );
   }
 
@@ -533,12 +541,6 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
   Widget _buildOverviewTab() {
     final info = widget.htmlInfo;
 
-    final bodyText = info.cleanBodyHtml;
-    final isBodyLong = bodyText != null && bodyText.length > 2500;
-    final displayBody = isBodyLong
-        ? '${bodyText.substring(0, 2500)}\n\n... [${bodyText.length - 2500} characters truncated in preview. Use \'Code Source\' or \'Open in Browser\' to view full content]'
-        : bodyText;
-
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF0F1216),
@@ -568,42 +570,6 @@ class _HtmlDocumentPreviewState extends State<HtmlDocumentPreview> {
               _buildDomStatCard('Canvas/SVG', '${info.canvasCount + info.svgCount}', Icons.draw_outlined, const Color(0xFF6EE7B7)),
             ],
           ),
-
-          if (displayBody != null && displayBody.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Extracted Clean Body Content',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
-                ),
-                if (isBodyLong)
-                  Text(
-                    'Preview (${NumberUtils.formatInt(displayBody.length)} chars)',
-                    style: const TextStyle(fontSize: 9.5, color: AppTheme.textMuted),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceElevated,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppTheme.borderSubtle),
-              ),
-              child: SingleChildScrollView(
-                child: SelectionArea(
-                  child: Text(
-                    displayBody,
-                    style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: AppTheme.textSecondary, height: 1.4),
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

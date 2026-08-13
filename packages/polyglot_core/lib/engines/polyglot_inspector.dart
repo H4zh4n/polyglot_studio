@@ -11,6 +11,9 @@ class ZipEntryInfo {
   final int compressedSize;
   final bool isDirectory;
   final DateTime? lastModified;
+  final int? crc32;
+  final String compressionMethod;
+  final bool isEncrypted;
 
   const ZipEntryInfo({
     required this.name,
@@ -18,6 +21,9 @@ class ZipEntryInfo {
     required this.compressedSize,
     this.isDirectory = false,
     this.lastModified,
+    this.crc32,
+    this.compressionMethod = 'Deflated',
+    this.isEncrypted = false,
   });
 }
 
@@ -190,6 +196,7 @@ class PolyglotInspectionResult {
   final Uint8List? extractedImageBytes;
   final Uint8List? extractedAudioBytes;
   final Uint8List? extractedMediaBytes;
+  final Uint8List? extractedZipBytes;
   final ImageMetadataInfo imageInfo;
   final List<ZipEntryInfo> zipEntries;
   final String? extractedHtmlContent;
@@ -222,6 +229,7 @@ class PolyglotInspectionResult {
     this.extractedImageBytes,
     this.extractedAudioBytes,
     this.extractedMediaBytes,
+    this.extractedZipBytes,
     this.imageInfo = const ImageMetadataInfo(),
     this.zipEntries = const [],
     this.extractedHtmlContent,
@@ -560,6 +568,7 @@ class PolyglotInspector {
       }
 
       if (extractedPdfBytes.isNotEmpty) {
+        extractedPdfBytes = normalizePdfStream(extractedPdfBytes, pdfOffset);
         pdfInfo = _analyzePdf(extractedPdfBytes, pdfOffset);
         pdfVersion = pdfInfo.version;
         pdfPageCount = pdfInfo.pageCount;
@@ -569,6 +578,7 @@ class PolyglotInspector {
     // 9. Check ZIP EOCD signature (PK\x05\x06) & decode entries
     bool hasZip = false;
     int? zipOffset;
+    Uint8List? extractedZipBytes;
     final zipEntries = <ZipEntryInfo>[];
 
     for (int i = bytes.length - 22; i >= 0 && i >= bytes.length - 65536; i--) {
@@ -586,8 +596,11 @@ class PolyglotInspector {
         // Decode internal files using archive ZipDecoder
         try {
           final zipData = bytes.sublist(zipOffset);
+          extractedZipBytes = Uint8List.fromList(zipData);
           final archive = ZipDecoder().decodeBytes(zipData, verify: false);
           for (final file in archive.files) {
+            final isEncrypted = file.isEncrypted;
+            final method = file.compressMethod == 0 ? 'Stored' : 'Deflated';
             zipEntries.add(
               ZipEntryInfo(
                 name: file.name,
@@ -595,6 +608,9 @@ class PolyglotInspector {
                 compressedSize: file.rawContent?.length ?? file.size,
                 isDirectory: !file.isFile || file.name.endsWith('/'),
                 lastModified: file.lastModDateTime,
+                crc32: file.crc32,
+                compressionMethod: method,
+                isEncrypted: isEncrypted,
               ),
             );
           }
@@ -822,6 +838,7 @@ class PolyglotInspector {
       extractedMediaBytes: extractedMediaBytes,
       imageInfo: imageInfo,
       zipEntries: zipEntries,
+      extractedZipBytes: extractedZipBytes,
       extractedHtmlContent: extractedHtmlContent,
       htmlInfo: htmlInfo,
       extractedPdfBytes: extractedPdfBytes,
@@ -904,6 +921,57 @@ class PolyglotInspector {
       byteOffset: offset ?? 0,
       byteSize: pdfBytes.length,
     );
+  }
+
+  /// Normalizes an extracted PDF stream by ensuring startxref and XREF table offsets point
+  /// correctly relative to the start of the extracted standalone PDF stream.
+  static Uint8List normalizePdfStream(Uint8List rawPdfBytes, [int pdfOffset = 0]) {
+    if (rawPdfBytes.length < 32) return rawPdfBytes;
+
+    // Search for 'startxref' in the trailing 10000 bytes
+    final startxrefTag = 'startxref'.codeUnits;
+    int startxrefPos = -1;
+    for (int i = rawPdfBytes.length - startxrefTag.length; i >= 0 && i >= rawPdfBytes.length - 10000; i--) {
+      bool match = true;
+      for (int j = 0; j < startxrefTag.length; j++) {
+        if (rawPdfBytes[i + j] != startxrefTag[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        startxrefPos = i;
+        break;
+      }
+    }
+
+    if (startxrefPos == -1) return rawPdfBytes;
+
+    // Find the real 'xref' position before startxref
+    final xrefTag = 'xref'.codeUnits;
+    int realXrefPos = -1;
+    for (int i = startxrefPos; i >= 0 && i >= startxrefPos - 50000; i--) {
+      bool match = true;
+      for (int j = 0; j < xrefTag.length; j++) {
+        if (rawPdfBytes[i + j] != xrefTag[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match && (i == 0 || rawPdfBytes[i - 1] == 0x0A || rawPdfBytes[i - 1] == 0x0D || rawPdfBytes[i - 1] == 0x20)) {
+        realXrefPos = i;
+        break;
+      }
+    }
+
+    if (realXrefPos == -1) return rawPdfBytes;
+
+    final pdfBuffer = Uint8List.fromList(rawPdfBytes);
+
+    // Reconstruct valid clean startxref and %%EOF
+    final beforeStartxref = pdfBuffer.sublist(0, startxrefPos);
+    final fixedTail = ascii.encode('startxref\n$realXrefPos\n%%EOF\n');
+    return Uint8List.fromList([...beforeStartxref, ...fixedTail]);
   }
 
   static HtmlMetadataInfo _analyzeHtml(String htmlContent) {

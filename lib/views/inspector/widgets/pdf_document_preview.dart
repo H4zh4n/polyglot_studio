@@ -68,6 +68,49 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
     }
   }
 
+  Uint8List _getCleanNormalizedPdfBytes() {
+    Uint8List bytesToOpen = widget.pdfBytes;
+
+    // Ensure stream starts at %PDF- marker
+    int startIdx = -1;
+    for (int i = 0; i <= bytesToOpen.length - 5; i++) {
+      if (bytesToOpen[i] == 0x25 &&
+          bytesToOpen[i + 1] == 0x50 &&
+          bytesToOpen[i + 2] == 0x44 &&
+          bytesToOpen[i + 3] == 0x46 &&
+          bytesToOpen[i + 4] == 0x2D) {
+        startIdx = i;
+        break;
+      }
+    }
+
+    if (startIdx > 0) {
+      // Find %%EOF marker
+      int endIdx = -1;
+      for (int i = bytesToOpen.length - 5; i >= startIdx; i--) {
+        if (bytesToOpen[i] == 0x25 &&
+            bytesToOpen[i + 1] == 0x25 &&
+            bytesToOpen[i + 2] == 0x45 &&
+            bytesToOpen[i + 3] == 0x4F &&
+            bytesToOpen[i + 4] == 0x46) {
+          endIdx = i + 5;
+          while (endIdx < bytesToOpen.length &&
+              (bytesToOpen[endIdx] == 0x0D || bytesToOpen[endIdx] == 0x0A || bytesToOpen[endIdx] == 0x20)) {
+            endIdx++;
+          }
+          break;
+        }
+      }
+      if (endIdx != -1) {
+        bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx, endIdx));
+      } else {
+        bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx));
+      }
+    }
+
+    return PolyglotInspector.normalizePdfStream(bytesToOpen, startIdx > 0 ? startIdx : 0);
+  }
+
   Future<void> _initPdfController() async {
     _pdfController?.dispose();
     _pdfController = null;
@@ -83,44 +126,7 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
         throw Exception('PDF byte stream is empty');
       }
 
-      Uint8List bytesToOpen = widget.pdfBytes;
-
-      // Ensure stream starts at %PDF- marker
-      int startIdx = -1;
-      for (int i = 0; i <= bytesToOpen.length - 5; i++) {
-        if (bytesToOpen[i] == 0x25 &&
-            bytesToOpen[i + 1] == 0x50 &&
-            bytesToOpen[i + 2] == 0x44 &&
-            bytesToOpen[i + 3] == 0x46 &&
-            bytesToOpen[i + 4] == 0x2D) {
-          startIdx = i;
-          break;
-        }
-      }
-
-      if (startIdx > 0) {
-        // Find %%EOF marker
-        int endIdx = -1;
-        for (int i = bytesToOpen.length - 5; i >= startIdx; i--) {
-          if (bytesToOpen[i] == 0x25 &&
-              bytesToOpen[i + 1] == 0x25 &&
-              bytesToOpen[i + 2] == 0x45 &&
-              bytesToOpen[i + 3] == 0x4F &&
-              bytesToOpen[i + 4] == 0x46) {
-            endIdx = i + 5;
-            while (endIdx < bytesToOpen.length &&
-                (bytesToOpen[endIdx] == 0x0D || bytesToOpen[endIdx] == 0x0A || bytesToOpen[endIdx] == 0x20)) {
-              endIdx++;
-            }
-            break;
-          }
-        }
-        if (endIdx != -1) {
-          bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx, endIdx));
-        } else {
-          bytesToOpen = Uint8List.fromList(bytesToOpen.sublist(startIdx));
-        }
-      }
+      final bytesToOpen = _getCleanNormalizedPdfBytes();
 
       final doc = await PdfDocument.openData(bytesToOpen);
       _totalPages = doc.pagesCount > 0 ? doc.pagesCount : 1;
@@ -197,10 +203,11 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
         return;
       }
 
+      final normalizedBytes = _getCleanNormalizedPdfBytes();
       final tempDir = Directory.systemTemp;
       final cleanName = widget.fileName.replaceAll(RegExp(r'[^\w\.-]'), '_');
       final tempFile = File(p.join(tempDir.path, 'polyglot_preview_${DateTime.now().millisecondsSinceEpoch}_$cleanName.pdf'));
-      await tempFile.writeAsBytes(widget.pdfBytes, flush: true);
+      await tempFile.writeAsBytes(normalizedBytes, flush: true);
 
       if (Platform.isWindows) {
         await Process.run('cmd', ['/c', 'start', '', tempFile.path]);
@@ -575,6 +582,8 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
 
     final isZoomed = (_currentScale - 1.0).abs() > 0.05;
 
+    final isMobile = MediaQuery.sizeOf(context).width < 650 || (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF0C0E12),
@@ -690,32 +699,33 @@ class _PdfDocumentPreviewState extends State<PdfDocumentPreview> {
             ],
           ),
 
-          const SizedBox(height: 8),
-
-          // 2. Gesture Helper Pill Banner
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated.withAlpha(140),
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: AppTheme.borderSubtle),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.touch_app_outlined, size: 13, color: AppTheme.accent),
-                SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    'Double-click to zoom in/out • Right-click or drag to pan around',
-                    style: TextStyle(fontSize: 10, color: AppTheme.textSecondary, letterSpacing: -0.1),
-                    overflow: TextOverflow.ellipsis,
+          // 2. Gesture Helper Pill Banner (Desktop only)
+          if (!isMobile) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceElevated.withAlpha(140),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: AppTheme.borderSubtle),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.touch_app_outlined, size: 13, color: AppTheme.accent),
+                  SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'Double-click to zoom in/out • Right-click or drag to pan around',
+                      style: TextStyle(fontSize: 10, color: AppTheme.textSecondary, letterSpacing: -0.1),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
 
           const SizedBox(height: 8),
 
