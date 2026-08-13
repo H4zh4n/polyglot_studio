@@ -34,7 +34,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(const PolyglotApp());
-    expect(find.text('Beheader Polyglot'), findsOneWidget);
+    expect(find.text('Polyglot'), findsOneWidget);
     expect(find.text('Studio'), findsOneWidget);
     expect(find.text('Primary Image'), findsOneWidget);
     expect(find.text('Video / Audio'), findsOneWidget);
@@ -338,8 +338,7 @@ void main() {
     expect(find.text('Codec: AAC Audio (M4A)', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('HTML format in inspector displays HtmlDocumentPreview with DOM overview and tabs',
-      (WidgetTester tester) async {
+  testWidgets('HTML format in inspector displays HtmlDocumentPreview with DOM overview and tabs', (WidgetTester tester) async {
     final controller = Get.put(PolyglotController());
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -357,7 +356,8 @@ void main() {
       hasPdfStream: false,
       hasZipEocd: false,
       detectedFormats: ['.html'],
-      extractedHtmlContent: '<!DOCTYPE html><html><head><title>Test App</title><style>body{color:red}</style><script>console.log(1)</script></head><body><h1>Hello</h1></body></html>',
+      extractedHtmlContent:
+          '<!DOCTYPE html><html><head><title>Test App</title><style>body{color:red}</style><script>console.log(1)</script></head><body><h1>Hello</h1></body></html>',
       htmlInfo: const HtmlMetadataInfo(
         title: 'Test App',
         hasCss: true,
@@ -401,7 +401,8 @@ void main() {
 
     controller.selectedViewMode.value = 1; // Inspector tab
 
-    const samplePdfString = '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page >>\nendobj\n%%EOF';
+    const samplePdfString =
+        '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page >>\nendobj\n%%EOF';
     final samplePdfBytes = Uint8List.fromList(samplePdfString.codeUnits);
 
     controller.inspectionResult.value = PolyglotInspectionResult(

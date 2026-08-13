@@ -1,6 +1,7 @@
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import '../controllers/polyglot_controller.dart';
 import '../models/app_file.dart';
 import '../theme/app_theme.dart';
@@ -34,7 +35,7 @@ class HomeView extends StatelessWidget {
             ),
           ),
           title: const Text(
-            'Beheader Polyglot',
+            'Polyglot',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: AppTheme.trackingTight),
             overflow: TextOverflow.ellipsis,
           ),
