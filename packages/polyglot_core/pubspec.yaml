@@ -1,0 +1,17 @@
+name: polyglot_core
+description: Pure Dart cross-platform core engine for generating media polyglots.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  image: ^4.3.0
+  archive: ^4.0.2
+  path: ^1.9.0
+  args: ^2.6.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^3.0.0
