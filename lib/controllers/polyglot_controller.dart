@@ -3,6 +3,7 @@ import 'dart:io' show File, Platform, Process, ProcessStartMode;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:polyglot_core/polyglot_core.dart';
 import '../models/app_file.dart';
@@ -12,6 +13,11 @@ import '../views/dialogs/polyglot_detected_dialog.dart';
 
 /// GetX Controller for managing in-memory polyglot generation and inspection across Web and native platforms.
 class PolyglotController extends GetxController {
+  // Dynamic App Version & Metadata
+  final RxString appVersion = ''.obs;
+  final RxString appBuildNumber = ''.obs;
+  final RxString appName = 'Polyglot Studio'.obs;
+
   // Input Reactive States
   final Rx<AppFile?> imageFile = Rx<AppFile?>(null);
   final Rx<AppFile?> mediaFile = Rx<AppFile?>(null);
@@ -42,6 +48,26 @@ class PolyglotController extends GetxController {
   final RxBool isAnalyzingDroppedFile = false.obs;
   final RxString analyzingFileName = ''.obs;
   final RxString analyzingStatus = ''.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _loadAppPackageInfo();
+  }
+
+  Future<void> _loadAppPackageInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      appVersion.value = info.version;
+      appBuildNumber.value = info.buildNumber;
+      if (info.appName.isNotEmpty) {
+        appName.value = info.appName;
+      }
+    } catch (_) {
+      appVersion.value = '1.0.0';
+      appBuildNumber.value = '1';
+    }
+  }
 
   // Validation
   bool get canGenerate => imageFile.value != null && mediaFile.value != null && !isGenerating.value;

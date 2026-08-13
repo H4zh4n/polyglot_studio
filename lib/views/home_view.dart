@@ -9,6 +9,7 @@ import 'desktop/desktop_home_view.dart';
 import 'dialogs/about_app_dialog.dart';
 import 'inspector/polyglot_inspector_view.dart';
 import 'mobile/mobile_home_view.dart';
+import 'widgets/github_link_button.dart';
 
 /// Master responsive view that switches dynamically between Generator Studio and Header/Payload Inspector.
 class HomeView extends StatefulWidget {
@@ -25,6 +26,9 @@ class _HomeViewState extends State<HomeView> {
   Widget build(BuildContext context) {
     final controller = Get.find<PolyglotController>();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth >= 650;
+
     return Obx(() {
       final mode = controller.selectedViewMode.value;
       final isAnalyzing = controller.isAnalyzingDroppedFile.value;
@@ -32,14 +36,15 @@ class _HomeViewState extends State<HomeView> {
 
       return Scaffold(
         appBar: AppBar(
-          leadingWidth: 44,
+          leadingWidth: 38,
+          titleSpacing: 4,
           leading: Padding(
-            padding: const EdgeInsets.only(left: 10.0),
+            padding: const EdgeInsets.only(left: 8.0),
             child: Center(
               child: Image.asset(
                 'assets/logo/logo_small.png',
-                width: 26,
-                height: 26,
+                width: 24,
+                height: 24,
                 fit: BoxFit.contain,
               ),
             ),
@@ -47,13 +52,15 @@ class _HomeViewState extends State<HomeView> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Polyglot Studio',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: AppTheme.trackingTight),
-                overflow: TextOverflow.ellipsis,
+              const Flexible(
+                child: Text(
+                  'Polyglot Studio',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: AppTheme.trackingTight),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (version.isNotEmpty) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Tooltip(
                   message: 'App Info & Build Details',
                   child: InkWell(
@@ -65,7 +72,7 @@ class _HomeViewState extends State<HomeView> {
                     ),
                     borderRadius: BorderRadius.circular(4),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppTheme.surfaceElevated,
                         borderRadius: BorderRadius.circular(4),
@@ -88,31 +95,46 @@ class _HomeViewState extends State<HomeView> {
             ],
           ),
           actions: [
-            // Mode Switcher Pills (Studio / Inspector)
-            Container(
-              padding: const EdgeInsets.all(2.5),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceElevated,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderSubtle),
+            // Mode Switcher Pills (Studio / Inspector) on Desktop only
+            if (isWide) ...[
+              Container(
+                padding: const EdgeInsets.all(2.5),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.borderSubtle),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildNavPill(
+                      label: 'Studio',
+                      icon: Icons.bolt,
+                      isSelected: mode == 0,
+                      onTap: () => controller.selectedViewMode.value = 0,
+                    ),
+                    const SizedBox(width: 2),
+                    _buildNavPill(
+                      label: 'Inspector',
+                      icon: Icons.search,
+                      isSelected: mode == 1,
+                      onTap: () => controller.selectedViewMode.value = 1,
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildNavPill(
-                    label: 'Studio',
-                    icon: Icons.bolt,
-                    isSelected: mode == 0,
-                    onTap: () => controller.selectedViewMode.value = 0,
-                  ),
-                  const SizedBox(width: 2),
-                  _buildNavPill(
-                    label: 'Inspector',
-                    icon: Icons.search,
-                    isSelected: mode == 1,
-                    onTap: () => controller.selectedViewMode.value = 1,
-                  ),
-                ],
+              const SizedBox(width: 6),
+            ],
+
+            // GitHub Profile Link with Avatar
+            GithubLinkButton(
+              isCompact: isWide,
+              isIconOnly: !isWide,
+              onTap: () => AboutAppDialog.show(
+                context,
+                version: controller.appVersion.value,
+                buildNumber: controller.appBuildNumber.value,
+                appName: controller.appName.value,
               ),
             ),
             const SizedBox(width: 4),
@@ -126,6 +148,48 @@ class _HomeViewState extends State<HomeView> {
             const SizedBox(width: 8),
           ],
         ),
+        bottomNavigationBar: isWide
+            ? null
+            : Container(
+                decoration: const BoxDecoration(
+                  color: AppTheme.surface,
+                  border: Border(top: BorderSide(color: AppTheme.borderSubtle)),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceElevated,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildMobileBottomNavItem(
+                              label: 'Studio',
+                              icon: Icons.bolt,
+                              isSelected: mode == 0,
+                              onTap: () => controller.selectedViewMode.value = 0,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: _buildMobileBottomNavItem(
+                              label: 'Inspector',
+                              icon: Icons.search,
+                              isSelected: mode == 1,
+                              onTap: () => controller.selectedViewMode.value = 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
         body: DropTarget(
           onDragEntered: (_) => setState(() => _isDraggingHover = true),
           onDragExited: (_) => setState(() => _isDraggingHover = false),
@@ -286,6 +350,46 @@ class _HomeViewState extends State<HomeView> {
               label,
               style: TextStyle(
                 fontSize: 10.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileBottomNavItem({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected ? Border.all(color: AppTheme.borderSubtle) : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? AppTheme.textPrimary : AppTheme.textMuted,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
               ),
